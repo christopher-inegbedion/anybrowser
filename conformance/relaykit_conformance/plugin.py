@@ -237,8 +237,11 @@ def run_transport(event_loop: asyncio.AbstractEventLoop):
                 task = state.get("task")
                 if task is not None:
                     task.cancel()
-                    with contextlib.suppress(Exception):
+                    # CancelledError is a BaseException: suppressing Exception
+                    # alone lets a routine teardown surface as a test failure.
+                    with contextlib.suppress(BaseException):
                         event_loop.run_until_complete(task)
+                state["clients"].clear()
 
     def _broadcast(message: Message) -> None:
         transport = state["transport"]

@@ -23,10 +23,12 @@ and a `BREAKING:` entry here.
   their own repo with one command.
 - `PlaywrightEngine`, the reference backend. Passes conformance.
 - `SyncEngine`, a blocking facade owning exactly one event loop.
+- Three transports — `memory`, `unix`, `websocket` — each shipping a server and
+  its matching client, and each passing the 10-test transport contract.
 
 ### In progress
 
 - `ChromeEngine` — extension-owned CDP, attaches to the user's own window.
 - `SafariEngine` — accessibility for input, Safari Web Extension for perception.
-- The daemon server and its three transports.
+- The daemon server.
 - The agent runtime: planner, tools, executor, memory.

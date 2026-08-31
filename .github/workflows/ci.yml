@@ -70,6 +70,21 @@ jobs:
         if: matrix.engine == 'playwright'
       - run: uv run pytest --pyargs relaykit_conformance --engine ${{ matrix.engine }} -q
 
+  transports:
+    name: conformance (transport ${{ matrix.transport }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        transport: [memory, unix, websocket]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv venv && uv pip install -e ".[dev]"
+      - run: uv run pytest --pyargs relaykit_conformance --transport ${{ matrix.transport }} -q
+
   build:
     name: wheel is not a lie
     runs-on: ubuntu-latest
