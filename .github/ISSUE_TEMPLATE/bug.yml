@@ -1,0 +1,31 @@
+name: Bug report
+description: Something behaves differently from what the docs or the contract say.
+labels: [bug]
+body:
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Which engine
+      options: [playwright, chrome, safari, a third-party engine, not engine-specific]
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, what you got. Exact error text if it is short.
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: >
+        The smallest code that shows it. A failing conformance test is the best
+        bug report there is — paste the output if you have one.
+      render: shell
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "relaykit 0.1.0, Python 3.12, macOS 26.5"
+    validations: { required: true }

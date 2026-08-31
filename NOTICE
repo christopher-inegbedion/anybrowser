@@ -1,0 +1,8 @@
+RelayKit
+Copyright 2026 RelayKit contributors
+
+This product includes software originally developed as part of Relay
+(https://relaythis.com) and released under the Apache License, Version 2.0.
+
+Portions of the Chrome engine's DOM perception and the Safari engine's
+accessibility bridge derive from that work.

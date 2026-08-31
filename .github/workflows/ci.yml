@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  FORCE_COLOR: "1"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv venv && uv pip install -e ".[dev]"
+      - run: uv run ruff check --output-format=github .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python }}
+      - run: uv venv && uv pip install -e ".[dev]"
+      - run: uv run pytest --cov=relaykit --cov-report=xml -q
+
+  conformance:
+    name: conformance (${{ matrix.engine }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The reference engine gates every PR: it is the proof the contract is
+          # satisfiable, so a change that breaks it broke the contract.
+          - { engine: playwright, os: ubuntu-latest, required: true }
+          # Chrome and Safari are mid-port and land here as they go green.
+          # See docs/porting/.
+          - { engine: chrome, os: ubuntu-latest, required: false }
+          - { engine: safari, os: macos-latest, required: false }
+    continue-on-error: ${{ !matrix.required }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv venv && uv pip install -e ".[dev]"
+      - run: uv run playwright install --with-deps chromium
+        if: matrix.engine == 'playwright'
+      - run: uv run pytest --pyargs relaykit_conformance --engine ${{ matrix.engine }} -q
+
+  build:
+    name: wheel is not a lie
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv build
+      # A green source tree with a broken wheel is the failure mode this catches:
+      # page-side JavaScript and the conformance fixture pages are read from disk
+      # at runtime, so leaving them out of the package data builds something that
+      # imports fine and dies on first use. Install the wheel into a clean
+      # environment and exercise it there, never in the checkout.
+      - name: install and exercise the built wheel
+        run: |
+          uv venv /tmp/wheeltest
+          VIRTUAL_ENV=/tmp/wheeltest uv pip install dist/*.whl playwright pytest
+          cd /tmp
+          VIRTUAL_ENV=/tmp/wheeltest uv run python -c "
+          import relaykit
+          from relaykit.engines.playwright.script import COLLECT_JS
+          from importlib.resources import files
+          pages = files('relaykit_conformance') / 'pages' / 'index.html'
+          assert pages.is_file(), 'conformance fixture pages missing from the wheel'
+          assert COLLECT_JS.strip(), 'page-side JavaScript missing from the wheel'
+          print('wheel ok:', relaykit.__version__, relaykit.available_engines())
+          "

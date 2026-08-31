@@ -1,0 +1,30 @@
+name: New engine
+description: You are building, or want, a backend for a browser we do not support.
+labels: [engine]
+body:
+  - type: input
+    id: browser
+    attributes:
+      label: Which browser or runtime
+    validations: { required: true }
+  - type: textarea
+    id: mechanism
+    attributes:
+      label: How would it drive the browser
+      description: >
+        CDP, WebDriver, an extension, accessibility, something else. If it cannot
+        attach to a session the user already has open, say so — that is the
+        constraint most of this design exists for.
+    validations: { required: true }
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: Capabilities you expect to support
+      description: >
+        And, more usefully, the ones you expect it structurally cannot. See
+        docs/architecture/capabilities.md.
+  - type: input
+    id: conformance
+    attributes:
+      label: Conformance status
+      placeholder: "not started / 18 of 32 passing / green"

@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Drag</title>
+<style>
+  #track { position: relative; width: 400px; height: 40px; background: #eee; }
+  #knob { position: absolute; left: 0; top: 0; width: 40px; height: 40px; background: #333; }
+</style>
+<div id="track"><div id="knob"></div></div>
+<p id="log">idle</p>
+<script>
+  // Deliberately reads event.buttons on move. A backend that omits the pressed
+  // state reports a successful drag and moves nothing -- this is the check.
+  const knob = document.getElementById('knob');
+  const track = document.getElementById('track');
+  let dragging = false, offset = 0;
+  knob.addEventListener('pointerdown', (e) => { dragging = true; offset = e.clientX - knob.offsetLeft; });
+  window.addEventListener('pointermove', (e) => {
+    if (!dragging || !(e.buttons & 1)) return;
+    const x = Math.max(0, Math.min(360, e.clientX - offset));
+    knob.style.left = x + 'px';
+    document.getElementById('log').textContent = 'knob:' + Math.round(x);
+  });
+  window.addEventListener('pointerup', () => { dragging = false; });
+</script>

@@ -1,0 +1,39 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>RelayKit conformance</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 24px; }
+  #tall { height: 3000px; }
+  #log { font-family: ui-monospace, monospace; }
+</style>
+<h1>RelayKit conformance</h1>
+
+<button id="plain">Plain button</button>
+<div id="handler-div" role="button" tabindex="0">Div with a handler</div>
+<a id="link" href="/second.html">Second page</a>
+
+<input id="text" type="text" placeholder="Type here">
+<input id="prefilled" type="text" value="existing value">
+<select id="select">
+  <option value="a">Alpha</option>
+  <option value="b">Beta</option>
+</select>
+<input id="file" type="file" style="display:none">
+
+<p id="log">idle</p>
+<p id="activation">activation: unknown</p>
+
+<div id="tall">scroll region</div>
+
+<script>
+  const log = (m) => { document.getElementById('log').textContent = m; };
+  document.getElementById('plain').addEventListener('click', (e) => {
+    log('clicked:plain');
+    document.getElementById('activation').textContent =
+      'activation: ' + e.isTrusted + '/' + navigator.userActivation?.isActive;
+  });
+  document.getElementById('handler-div').addEventListener('click', () => log('clicked:div'));
+  document.getElementById('text').addEventListener('input', (e) => log('typed:' + e.target.value));
+  document.getElementById('select').addEventListener('change', (e) => log('selected:' + e.target.value));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Enter') log('key:Enter'); });
+</script>
