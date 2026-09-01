@@ -36,6 +36,26 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Constructor option for the engine. Repeatable.",
     )
     group.addoption(
+        "--model",
+        action="store",
+        default="",
+        help="Name of the relaykit model provider to test. Without it, the "
+        "model contract is skipped.",
+    )
+    group.addoption(
+        "--model-name",
+        action="store",
+        default="",
+        help="The model id to send (e.g. gpt-4o-mini). Required with --model.",
+    )
+    group.addoption(
+        "--model-option",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Provider constructor option (e.g. base_url=...). Repeatable.",
+    )
+    group.addoption(
         "--via-daemon",
         action="store_true",
         default=False,
@@ -309,3 +329,29 @@ def run_transport(event_loop: asyncio.AbstractEventLoop):
 
     _serve.broadcast = _broadcast  # type: ignore[attr-defined]
     return _serve
+
+
+# --------------------------------------------------------------------------- #
+# Model conformance                                                            #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture(scope="session")
+def provider(pytestconfig: pytest.Config) -> Any:
+    """The model provider under test. Skips unless --model names one."""
+    name = pytestconfig.getoption("--model")
+    if not name:
+        pytest.skip("no --model given")
+    from relaykit.core.registry import models
+
+    options: dict[str, Any] = {}
+    for raw in pytestconfig.getoption("--model-option"):
+        key, _, value = str(raw).partition("=")
+        if not key:
+            raise pytest.UsageError(f"malformed --model-option: {raw!r}")
+        # A comma-separated value becomes a list, so image_models can be given
+        # on the command line for a gateway the built-in table cannot know.
+        options[key.strip()] = (
+            [v for v in value.split(",") if v] if "," in value else _coerce(value)
+        )
+    return models.get(name)(**options)

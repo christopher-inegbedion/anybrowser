@@ -23,7 +23,8 @@ from __future__ import annotations
 import abc
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from types import MappingProxyType
+from typing import Any, ClassVar
 
 from ..core.engine import BrowserEngine
 from ..core.types import ActionOutcome, Element, Snapshot
@@ -87,7 +88,7 @@ class Tool(abc.ABC):
     #: One sentence, written for the model rather than for a human reader.
     description: str = ""
     #: JSON Schema for the arguments.
-    parameters: Mapping[str, Any] = {}
+    parameters: ClassVar[Mapping[str, Any]] = MappingProxyType({})
     #: Tools that change the world are gated by the confirmation policy before
     #: they run. Read-only tools are not. Default to True when unsure.
     mutating: bool = True
