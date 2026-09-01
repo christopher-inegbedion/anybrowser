@@ -82,11 +82,6 @@ packages = ["src/relaykit", "conformance/relaykit_conformance"]
 # The page-side JavaScript and the conformance fixture pages are loaded at
 # runtime from disk. Omitting them builds a wheel that imports fine and fails on
 # first use -- verified against the built wheel, not the source tree.
-[tool.hatch.build.targets.wheel.force-include]
-"conformance/relaykit_conformance/pages" = "relaykit_conformance/pages"
-"src/relaykit/perception/js" = "relaykit/perception/js"
-"src/relaykit/engines/safari/mac_engine" = "relaykit/engines/safari/mac_engine"
-
 [tool.hatch.build.targets.sdist]
 include = ["src", "conformance", "docs", "examples", "tests", "README.md", "LICENSE", "NOTICE"]
 

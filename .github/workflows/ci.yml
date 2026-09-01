@@ -92,22 +92,26 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv build
-      # A green source tree with a broken wheel is the failure mode this catches:
-      # page-side JavaScript and the conformance fixture pages are read from disk
-      # at runtime, so leaving them out of the package data builds something that
-      # imports fine and dies on first use. Install the wheel into a clean
-      # environment and exercise it there, never in the checkout.
+      # A green source tree with a broken wheel is the failure mode this catches,
+      # and it has caught two already: assets read from disk at runtime that the
+      # package data omitted, and `relaykit.engines` the subpackage shadowing the
+      # registry of the same name -- which survived in a checkout on import-order
+      # luck and broke the moment it was installed. Exercise the wheel in a clean
+      # environment, never in the checkout.
       - name: install and exercise the built wheel
         run: |
           uv venv /tmp/wheeltest
-          VIRTUAL_ENV=/tmp/wheeltest uv pip install dist/*.whl playwright pytest
+          VIRTUAL_ENV=/tmp/wheeltest uv pip install dist/*.whl
           cd /tmp
-          VIRTUAL_ENV=/tmp/wheeltest uv run python -c "
+          /tmp/wheeltest/bin/python -c "
           import relaykit
-          from relaykit.engines.playwright.script import COLLECT_JS
+          from relaykit.perception import COLLECT_SCRIPT, READ_SCRIPT
+          from relaykit.engines.safari.build import _SOURCE, _PLIST
           from importlib.resources import files
-          pages = files('relaykit_conformance') / 'pages' / 'index.html'
-          assert pages.is_file(), 'conformance fixture pages missing from the wheel'
-          assert COLLECT_JS.strip(), 'page-side JavaScript missing from the wheel'
+          assert relaykit.available_engines(), 'no engines discoverable'
+          assert 'deepDom' in COLLECT_SCRIPT, 'deep-DOM helpers not inlined'
+          assert '__RELAYKIT_DEEP_DOM_HELPERS__' not in COLLECT_SCRIPT
+          assert _SOURCE.exists() and _PLIST.exists(), 'Swift helper missing'
+          assert (files('relaykit_conformance')/'pages'/'index.html').is_file()
           print('wheel ok:', relaykit.__version__, relaykit.available_engines())
           "
