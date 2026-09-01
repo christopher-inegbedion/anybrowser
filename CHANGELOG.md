@@ -22,6 +22,11 @@ and a `BREAKING:` entry here.
   gated, installed as a pytest plugin so third-party backends can run it in
   their own repo with one command.
 - `PlaywrightEngine`, the reference backend. Passes conformance.
+- `ChromeEngine` over the DevTools WebSocket: 28 passed, 4 skipped. Launches
+  Chrome or attaches to a running one, and derives its declared
+  `attach_to_user_session` from what the live pipe can actually reach.
+- `ChromeEngine`, a direct CDP backend with truthful action outcomes, DOM
+  perception, trusted input, navigation, tabs, screenshots, uploads, and cookies.
 - `SyncEngine`, a blocking facade owning exactly one event loop.
 - Three transports — `memory`, `unix`, `websocket` — each shipping a server and
   its matching client, and each passing the 10-test transport contract.
@@ -35,7 +40,8 @@ and a `BREAKING:` entry here.
 
 ### In progress
 
-- `ChromeEngine` — extension-owned CDP, attaches to the user's own window.
-- `SafariEngine` — accessibility for input, Safari Web Extension for perception.
+- `ChromeEngine` in `extension` mode — CDP relayed through a browser extension,
+  the mode that reaches the user's own window.
+- `SafariEngine` — the native half is done; perception needs the Web Extension.
 - The daemon server.
 - The agent runtime: planner, tools, executor, memory.

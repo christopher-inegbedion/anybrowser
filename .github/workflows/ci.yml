@@ -55,9 +55,9 @@ jobs:
           # The reference engine gates every PR: it is the proof the contract is
           # satisfiable, so a change that breaks it broke the contract.
           - { engine: playwright, os: ubuntu-latest, required: true }
-          # Chrome and Safari are mid-port and land here as they go green.
-          # See docs/porting/.
-          - { engine: chrome, os: ubuntu-latest, required: false }
+          # Chrome runs its DevTools pipe here; the extension pipe cannot be
+          # exercised without a real browser profile. See docs/porting/chrome.md.
+          - { engine: chrome, os: ubuntu-latest, required: true }
           - { engine: safari, os: macos-latest, required: false }
     continue-on-error: ${{ !matrix.required }}
     steps:

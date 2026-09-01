@@ -89,14 +89,23 @@ Full walkthrough: [**Writing an engine**](docs/guides/writing-an-engine.md).
 
 | Engine | Attaches to your session | Trusted input | Conformance |
 |---|---|---|---|
-| `playwright` | no — own profile | yes | passing |
-| `chrome` | yes — extension-owned CDP | yes | porting ([#1](https://github.com/christopher-inegbedion/relaykit/issues/1)) |
+| `chrome` (DevTools) | no — needs the launch flag | yes | **28 passed, 4 skipped** |
+| `chrome` (extension) | yes — extension-owned CDP | yes | porting ([#1](https://github.com/christopher-inegbedion/relaykit/issues/1)) |
+| `playwright` | no — own profile | yes | **28 passed, 4 skipped** |
 | `safari` | yes — accessibility + extension | yes | porting ([#2](https://github.com/christopher-inegbedion/relaykit/issues/2)) |
 
-`chrome` and `safari` are being ported out of Relay's daemon. Their interfaces,
-entry points and declared capabilities are fixed; the implementations are
-landing. They refuse cleanly from `probe()` until they work, rather than
-half-running — see [porting](docs/porting/).
+The Chrome engine has two pipes behind one interface. `devtools` talks to a
+browser started with `--remote-debugging-port` — standard, and the only mode
+that runs in CI. `extension` relays CDP through a browser extension and is the
+one that matters, because it attaches to the browser you already have open,
+with your tabs and your logins. Same engine either way; the connection reports
+which it is, and the declared `attach_to_user_session` capability is derived
+from that rather than asserted next to it.
+
+Safari's native half — the Swift accessibility helper that produces trusted
+background clicks — is ported and working. Its perception half needs the Safari
+Web Extension, so `probe()` refuses until that lands rather than half-running.
+See [porting](docs/porting/).
 
 ---
 
