@@ -60,6 +60,10 @@ relaykit_conformance = "relaykit_conformance.plugin"
 playwright = "relaykit.engines.playwright:PlaywrightEngine"
 chrome = "relaykit.engines.chrome:ChromeEngine"
 safari = "relaykit.engines.safari:SafariEngine"
+# A daemon client IS an engine, so it registers as one. Pointing the engine
+# conformance suite at `remote` grades the whole daemon stack -- transport,
+# protocol, codec, dispatch and the real engine at the far end.
+remote = "relaykit.daemon:RemoteEngine"
 
 [project.entry-points."relaykit.transports"]
 websocket = "relaykit.daemon.transports.websocket:WebSocketTransport"
