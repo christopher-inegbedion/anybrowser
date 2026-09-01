@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv venv && uv pip install -e ".[dev]"
@@ -45,7 +45,7 @@ jobs:
         python: ["3.10", "3.13"]
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv python install ${{ matrix.python }}
@@ -74,7 +74,7 @@ jobs:
     continue-on-error: ${{ !matrix.required }}
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv venv && uv pip install -e ".[dev]"
@@ -95,7 +95,7 @@ jobs:
         transport: [memory, unix, websocket]
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv venv && uv pip install -e ".[dev]"
@@ -106,7 +106,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
       - run: uv build
       # A green source tree with a broken wheel is the failure mode this catches,
       # and it has caught two already: assets read from disk at runtime that the
