@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import functools
 import http.server
 import threading
@@ -33,6 +34,19 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=[],
         metavar="KEY=VALUE",
         help="Constructor option for the engine. Repeatable.",
+    )
+    group.addoption(
+        "--via-daemon",
+        action="store_true",
+        default=False,
+        help="Serve the engine through a daemon and test the client end. Grades "
+        "the whole stack: transport, protocol, codec, dispatch.",
+    )
+    group.addoption(
+        "--daemon-transport",
+        action="store",
+        default="memory",
+        help="Transport for --via-daemon (default: memory).",
     )
     group.addoption(
         "--transport",
@@ -128,9 +142,37 @@ def engine(
 
     instance = cls(**engine_options)
     event_loop.run_until_complete(instance.start())
+
+    if not pytestconfig.getoption("--via-daemon"):
+        try:
+            yield instance
+        finally:
+            event_loop.run_until_complete(instance.close())
+        return
+
+    # Wrap the real engine in a daemon and hand the tests the client end. Every
+    # assertion then travels the full stack, so the suite grades the daemon
+    # without needing a contract of its own.
+    from relaykit.core.registry import transports as transport_registry
+    from relaykit.daemon import DaemonServer, RemoteEngine
+
+    transport = transport_registry.get(pytestconfig.getoption("--daemon-transport"))()
+    server = DaemonServer(instance, transport)
+    serve_task = event_loop.create_task(server.serve())
+    event_loop.run_until_complete(asyncio.sleep(0.2))
+
+    remote = RemoteEngine(
+        transport=pytestconfig.getoption("--daemon-transport"), address=transport.address
+    )
+    event_loop.run_until_complete(remote.start())
     try:
-        yield instance
+        yield remote
     finally:
+        event_loop.run_until_complete(remote.close())
+        event_loop.run_until_complete(server.close())
+        serve_task.cancel()
+        with contextlib.suppress(BaseException):
+            event_loop.run_until_complete(serve_task)
         event_loop.run_until_complete(instance.close())
 
 

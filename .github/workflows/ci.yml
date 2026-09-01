@@ -32,6 +32,9 @@ jobs:
       # mypy thinks it is on, so macOS-only branches read as unreachable on
       # Linux -- and Windows genuinely lacks the Unix-socket API. Checking one
       # platform hides both.
+      # Metadata is not covered by tests: nothing imports a plugin by its
+      # declared path. Two defects have hidden there already.
+      - run: uv run python scripts/check_entry_points.py
       - run: uv run mypy --platform linux
       - run: uv run mypy --platform darwin
       - run: uv run mypy --platform win32
@@ -100,6 +103,28 @@ jobs:
           enable-cache: true
       - run: uv venv && uv pip install -e ".[dev]"
       - run: uv run pytest --pyargs relaykit_conformance --transport ${{ matrix.transport }} -q -rs
+
+  daemon:
+    name: conformance (engine through the daemon, ${{ matrix.transport }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        transport: [memory, unix, websocket]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv venv && uv pip install -e ".[dev]"
+      - run: uv run playwright install --with-deps chromium
+      # The daemon client IS an engine, so the engine contract grades the whole
+      # stack -- transport, protocol, codec, dispatch, and the browser at the far
+      # end. The daemon needs no contract of its own; its job is to be
+      # indistinguishable from what it serves, which is what this measures.
+      - run: >
+          uv run pytest --pyargs relaykit_conformance --engine playwright
+          --via-daemon --daemon-transport ${{ matrix.transport }} -q -rs
 
   build:
     name: wheel is not a lie

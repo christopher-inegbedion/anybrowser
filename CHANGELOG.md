@@ -52,10 +52,16 @@ and a `BREAKING:` entry here.
   Unix domain sockets, instead of raising `AttributeError` from inside a
   connect.
 
+- `DaemonServer`: owns one engine, serves many clients, with pluggable
+  authorisation (`AllowAll`, `TokenAuth`).
+- `RemoteEngine`: the client end, which is itself a `BrowserEngine`. Registered
+  as the `remote` engine, so `--via-daemon` runs the entire engine contract
+  through the daemon stack.
+- `scripts/check_entry_points.py`, run in CI: imports every declared plugin.
+
 ### In progress
 
 - `ChromeEngine` in `extension` mode — CDP relayed through a browser extension,
   the mode that reaches the user's own window.
 - `SafariEngine` — the native half is done; perception needs the Web Extension.
-- The daemon server.
 - The agent runtime: planner, tools, executor, memory.
