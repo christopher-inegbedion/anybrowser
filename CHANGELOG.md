@@ -17,6 +17,8 @@ and a `BREAKING:` entry here.
 - `DaemonTransport` and a JSON-framed protocol, so the daemon does not know
   whether it is reached over a socket, a pipe, or nothing at all.
 - `ModelProvider`, the LLM interface.
+- OpenAI-compatible and Anthropic model providers with multimodal requests,
+  real SSE streaming, and token-based cost reporting.
 - Entry-point registries for engines, transports and models.
 - `relaykit_conformance`, the executable engine contract — 32 tests, capability
   gated, installed as a pytest plugin so third-party backends can run it in
@@ -58,6 +60,21 @@ and a `BREAKING:` entry here.
   as the `remote` engine, so `--via-daemon` runs the entire engine contract
   through the daemon stack.
 - `scripts/check_entry_points.py`, run in CI: imports every declared plugin.
+- Model providers: `openai` (any OpenAI-compatible endpoint) and `anthropic`,
+  both with real streaming, real token counts and per-model pricing that
+  reports zero *with an explanation* rather than inventing a free call.
+- The agent runtime: `AgentRunner`, `LLMPlanner`, and eight browser tools.
+- A model-provider conformance suite (`--model`), opt-in because it spends money.
+- The `relaykit` CLI: `plugins`, `info`, `look`, `serve`, `run`.
+
+### Fixed
+
+- The agent's stuck detector measured repetition, so the commonest loop shape —
+  act, look, act, look — walked straight past it. It now measures progress:
+  N consecutive actions that change nothing, whatever their shape.
+- The planner rendered elements as `[2:0] a 'a Learn more'`, and models duly
+  passed the quoted label as the handle. Handles now have their own labelled
+  column, and the tag is not printed twice.
 
 ### In progress
 
