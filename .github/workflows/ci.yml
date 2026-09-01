@@ -27,7 +27,14 @@ jobs:
       - run: uv venv && uv pip install -e ".[dev]"
       - run: uv run ruff check --output-format=github .
       - run: uv run ruff format --check .
-      - run: uv run mypy
+      # Type-check every platform's view, not just the runner's. A literal
+      # sys.platform comparison narrows to a constant for whichever platform
+      # mypy thinks it is on, so macOS-only branches read as unreachable on
+      # Linux -- and Windows genuinely lacks the Unix-socket API. Checking one
+      # platform hides both.
+      - run: uv run mypy --platform linux
+      - run: uv run mypy --platform darwin
+      - run: uv run mypy --platform win32
 
   test:
     runs-on: ${{ matrix.os }}

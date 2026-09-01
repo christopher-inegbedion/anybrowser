@@ -7,7 +7,13 @@ half -- the Swift accessibility helper -- is ported and usable on its own via
 """
 
 from .bridge import EngineStatus, SafariBridge, SafariBridgeError
-from .build import DEFAULT_BUNDLE_ID, build_engine, engine_app_path, swift_available
+from .build import (
+    DEFAULT_BUNDLE_ID,
+    build_engine,
+    engine_app_path,
+    on_macos,
+    swift_available,
+)
 from .engine import SUPPORTED_CAPABILITIES, SafariEngine
 
 __all__ = [
@@ -19,5 +25,6 @@ __all__ = [
     "SafariEngine",
     "build_engine",
     "engine_app_path",
+    "on_macos",
     "swift_available",
 ]

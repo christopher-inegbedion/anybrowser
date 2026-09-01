@@ -32,8 +32,20 @@ _EXECUTABLE = Path("Contents") / "MacOS" / "RelayKitSafariEngine"
 DEFAULT_BUNDLE_ID = "dev.relaykit.safari-engine"
 
 
+def on_macos() -> bool:
+    """Whether this is macOS.
+
+    Wrapped in a function rather than compared inline because a type checker
+    narrows a literal ``sys.platform`` comparison to a constant for whichever
+    platform it is running on, and then reports every macOS-only branch as
+    unreachable on Linux -- or the reverse. The behaviour is identical; only the
+    checker's view of it changes.
+    """
+    return sys.platform == "darwin"
+
+
 def swift_available() -> bool:
-    return sys.platform == "darwin" and shutil.which("swiftc") is not None
+    return on_macos() and shutil.which("swiftc") is not None
 
 
 def engine_app_path(search: list[Path] | None = None) -> Path | None:
@@ -67,7 +79,7 @@ def build_engine(
     and is frequently refused with no prompt at all -- which presents as an
     engine that silently cannot click anything.
     """
-    if sys.platform != "darwin":
+    if not on_macos():
         raise EngineNotAvailable("the Safari engine only builds on macOS")
     if not swift_available():
         raise EngineNotAvailable(

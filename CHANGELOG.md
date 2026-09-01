@@ -48,6 +48,9 @@ and a `BREAKING:` entry here.
   `TypeError` on any unmatched option.
 - `press_key` on Chrome sent text-bearing keys as `rawKeyDown`, stalling the
   input queue so the *next* command hung until timeout.
+- The `unix` transport now refuses with a clear message on platforms without
+  Unix domain sockets, instead of raising `AttributeError` from inside a
+  connect.
 
 ### In progress
 

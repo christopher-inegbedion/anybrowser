@@ -26,7 +26,19 @@ from ..protocol import Message, decode, encode
 from ..transport import DaemonClient, MessageHandler
 from .base import BaseConnection, BaseTransport
 
-__all__ = ["UnixSocketClient", "UnixSocketTransport"]
+__all__ = ["UnixSocketClient", "UnixSocketTransport", "available"]
+
+
+def available() -> bool:
+    """Whether this platform has Unix domain sockets.
+
+    Windows does not, and ``asyncio`` simply lacks the functions there -- so
+    without this check the failure is an ``AttributeError`` about
+    ``open_unix_connection`` from inside a connect, rather than a statement that
+    this transport does not exist on this machine. Callers should pick
+    ``websocket`` instead.
+    """
+    return hasattr(asyncio, "start_unix_server")
 
 
 def _peer_identity(sock: socket.socket | None, fallback: str) -> str:
@@ -96,6 +108,10 @@ class UnixSocketTransport(BaseTransport):
         return str(self._path)
 
     async def serve(self, handler: MessageHandler) -> None:
+        if not available():
+            raise TransportError(
+                "this platform has no Unix domain sockets; use the websocket transport"
+            )
         self._path.parent.mkdir(parents=True, exist_ok=True)
         # A stale socket from a crashed daemon makes bind fail with EADDRINUSE
         # even though nothing is listening. Removing it is safe: a live daemon
@@ -109,7 +125,9 @@ class UnixSocketTransport(BaseTransport):
             connection.peer = _peer_identity(sock, f"unix:{connection.id}")
             await self._pump(connection, connection.frames(), handler)
 
-        self._server = await asyncio.start_unix_server(_on_client, path=str(self._path))
+        self._server = await asyncio.start_unix_server(  # type: ignore[attr-defined,unused-ignore]
+            _on_client, path=str(self._path)
+        )
         os.chmod(self._path, self._mode)
         try:
             await self._server.serve_forever()
@@ -136,7 +154,9 @@ class UnixSocketClient(DaemonClient):
     @classmethod
     async def connect(cls, address: str, **options: object) -> UnixSocketClient:
         try:
-            reader, writer = await asyncio.open_unix_connection(address)
+            reader, writer = await asyncio.open_unix_connection(  # type: ignore[attr-defined,unused-ignore]
+                address
+            )
         except OSError as exc:
             raise TransportError(f"cannot connect to {address}: {exc}") from exc
         return cls(reader, writer)

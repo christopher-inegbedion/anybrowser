@@ -33,7 +33,6 @@ both are present rather than half-working. See ``docs/porting/safari.md``.
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -53,7 +52,7 @@ from ...core.types import (
     Viewport,
 )
 from .bridge import SafariBridge
-from .build import engine_app_path
+from .build import engine_app_path, on_macos
 
 __all__ = ["SUPPORTED_CAPABILITIES", "SafariEngine"]
 
@@ -107,7 +106,7 @@ class SafariEngine(BrowserEngine):
 
     @classmethod
     async def probe(cls) -> None:
-        if sys.platform != "darwin":
+        if not on_macos():
             raise EngineNotAvailable("the Safari engine only runs on macOS")
         if engine_app_path() is None:
             raise EngineNotAvailable(
