@@ -49,3 +49,21 @@ def test_no_change_is_ok_but_not_changed():
 def test_failure_is_neither():
     outcome = ActionOutcome.failure("element is gone")
     assert not outcome.ok and not outcome.changed
+
+
+def test_outcome_constructors_reject_a_detail_kwarg():
+    """`detail` is the first positional argument, so passing it again collides.
+
+    This has now been written twice, in two engines, and both times mypy caught
+    it rather than a test -- meaning it would have reached anyone not running a
+    type checker. The extra data belongs under its own key.
+    """
+    with pytest.raises(TypeError):
+        ActionOutcome.no_change("nothing happened", detail="why")
+    with pytest.raises(TypeError):
+        ActionOutcome.failure("it broke", detail="why")
+
+    # The intended shape: context travels in `data`.
+    outcome = ActionOutcome.no_change("nothing happened", reason="already at the limit")
+    assert outcome.detail == "nothing happened"
+    assert outcome.data["reason"] == "already at the limit"

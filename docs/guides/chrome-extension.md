@@ -53,11 +53,15 @@ import json, urllib.request, websockets
 
 version = json.load(urllib.request.urlopen("http://127.0.0.1:9222/json/version"))
 async with websockets.connect(version["webSocketDebuggerUrl"]) as ws:
-    await ws.send(json.dumps({
-        "id": 1,
-        "method": "Extensions.loadUnpacked",
-        "params": {"path": "/absolute/path/to/extensions/chrome"},
-    }))
+    await ws.send(
+        json.dumps(
+            {
+                "id": 1,
+                "method": "Extensions.loadUnpacked",
+                "params": {"path": "/absolute/path/to/extensions/chrome"},
+            }
+        )
+    )
     print(json.loads(await ws.recv()))
 ```
 

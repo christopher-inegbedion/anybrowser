@@ -80,7 +80,11 @@ and a `BREAKING:` entry here.
   extension, attaching to the browser the user already has open. Passes the
   full engine contract. The extension itself is in `extensions/chrome`.
 
+- `SafariEngine`, complete: the Swift accessibility helper for trusted
+  background input and occluded-window capture, plus a Safari Web Extension for
+  the DOM and pointer gestures. `scripts/build_safari_extension.py` assembles
+  and converts it in one command.
+
 ### In progress
 
-- `SafariEngine` — the native half is done; perception needs the Web Extension.
 - The agent runtime: planner, tools, executor, memory.

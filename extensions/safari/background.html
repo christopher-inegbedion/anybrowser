@@ -1,0 +1,12 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>RelayKit Bridge</title>
+<!--
+  A background PAGE, not a service worker.
+
+  Safari terminates a Manifest V3 service worker before async callbacks resolve,
+  which is fatal for a long-lived WebSocket to the engine: the socket dies
+  mid-conversation and every in-flight request is lost. A persistent background
+  page is the only thing in Safari that stays up long enough to hold one.
+-->
+<script src="background.js"></script>

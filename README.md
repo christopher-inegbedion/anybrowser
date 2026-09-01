@@ -93,7 +93,7 @@ Full walkthrough: [**Writing an engine**](docs/guides/writing-an-engine.md).
 | `chrome` (DevTools) | no — needs the launch flag | yes | **28 passed, 4 skipped** |
 | `chrome` (extension) | **yes** — your own windows | yes | **29 passed, 19 skipped** |
 | `playwright` | no — own profile | yes | **28 passed, 4 skipped** |
-| `safari` | yes — accessibility + extension | yes | porting ([#4](https://github.com/christopher-inegbedion/relaykit/issues/4)) |
+| `safari` | yes — accessibility + extension | yes | needs a local setup ([guide](docs/guides/safari-extension.md)) |
 
 The Chrome engine has two pipes behind one interface. `devtools` talks to a
 browser started with `--remote-debugging-port` — standard, and the only mode
@@ -108,10 +108,11 @@ open, see [driving your own Chrome](docs/guides/chrome-extension.md) — note th
 `--load-extension` is silently ignored by Chrome stable, which is a memorable
 afternoon if nobody tells you.
 
-Safari's native half — the Swift accessibility helper that produces trusted
-background clicks — is ported and working. Its perception half needs the Safari
-Web Extension, so `probe()` refuses until that lands rather than half-running.
-See [porting](docs/porting/).
+Safari is implemented in both halves: a Swift helper for trusted background
+input and occlusion-proof capture, and a Web Extension for the DOM and pointer
+gestures. It needs a local build and a one-time Accessibility grant, so it skips
+rather than fails where that has not been done — see
+[driving Safari](docs/guides/safari-extension.md).
 
 ---
 
@@ -139,6 +140,8 @@ docs/            architecture, guides, ADRs
 - [Writing an engine](docs/guides/writing-an-engine.md)
 - [Writing a transport](docs/guides/writing-a-transport.md)
 - [Writing a model provider](docs/guides/writing-a-model-provider.md)
+- [Driving your own Chrome](docs/guides/chrome-extension.md)
+- [Driving Safari](docs/guides/safari-extension.md)
 - [ADRs](docs/adr/) — the decisions and what they cost
 
 ---
