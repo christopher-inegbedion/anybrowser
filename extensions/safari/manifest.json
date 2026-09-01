@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "RelayKit Bridge",
+  "version": "0.1.0",
+  "description": "Lets RelayKit see and act on pages in your Safari windows, under your control.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "page": "background.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "vendor/deep-dom-helpers.js",
+        "perception.js",
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "icons": {
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png",
+    "256": "icons/icon-256.png",
+    "512": "icons/icon-512.png"
+  }
+}

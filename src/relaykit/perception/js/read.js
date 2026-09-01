@@ -137,6 +137,18 @@ __RELAYKIT_DEEP_DOM_HELPERS__
     case 'scrollHeight':
       return document.documentElement.scrollHeight;
 
+    case 'href':
+      return document.location.href;
+
+    case 'scrollBy': {
+      // Safari has no CDP, so there is no Input.dispatchMouseEvent to send a
+      // wheel with. window.scrollBy is not a gesture and will not trigger
+      // wheel handlers, but it does move the page, which is what the caller
+      // asked for. Container scrolling goes through pointer events instead.
+      window.scrollBy(Number(request.x) || 0, Number(request.y) || 0);
+      return { scrollX: window.scrollX, scrollY: window.scrollY };
+    }
+
     default:
       return null;
   }

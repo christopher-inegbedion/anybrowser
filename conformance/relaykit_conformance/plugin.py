@@ -161,7 +161,15 @@ def engine(
         pytest.skip(f"{name} is not available here: {exc}")
 
     instance = cls(**engine_options)
-    event_loop.run_until_complete(instance.start())
+    # start() can discover unavailability that probe() cannot see without side
+    # effects -- a browser that is not running, an extension that was never
+    # installed. It means the same thing and deserves the same answer: this
+    # machine cannot run the engine, which is a skip, not a failure.
+    try:
+        event_loop.run_until_complete(instance.start())
+    except EngineNotAvailable as exc:
+        event_loop.run_until_complete(instance.close())
+        pytest.skip(f"{name} is not available here: {exc}")
 
     if not pytestconfig.getoption("--via-daemon"):
         try:
