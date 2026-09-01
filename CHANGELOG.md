@@ -76,9 +76,11 @@ and a `BREAKING:` entry here.
   passed the quoted label as the handle. Handles now have their own labelled
   column, and the tag is not printed twice.
 
+- `ChromeEngine(mode="extension")`: CDP relayed through the RelayKit browser
+  extension, attaching to the browser the user already has open. Passes the
+  full engine contract. The extension itself is in `extensions/chrome`.
+
 ### In progress
 
-- `ChromeEngine` in `extension` mode — CDP relayed through a browser extension,
-  the mode that reaches the user's own window.
 - `SafariEngine` — the native half is done; perception needs the Web Extension.
 - The agent runtime: planner, tools, executor, memory.

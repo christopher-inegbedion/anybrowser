@@ -91,7 +91,7 @@ Full walkthrough: [**Writing an engine**](docs/guides/writing-an-engine.md).
 | Engine | Attaches to your session | Trusted input | Conformance |
 |---|---|---|---|
 | `chrome` (DevTools) | no — needs the launch flag | yes | **28 passed, 4 skipped** |
-| `chrome` (extension) | yes — extension-owned CDP | yes | porting ([#3](https://github.com/christopher-inegbedion/relaykit/issues/3)) |
+| `chrome` (extension) | **yes** — your own windows | yes | **29 passed, 19 skipped** |
 | `playwright` | no — own profile | yes | **28 passed, 4 skipped** |
 | `safari` | yes — accessibility + extension | yes | porting ([#4](https://github.com/christopher-inegbedion/relaykit/issues/4)) |
 
@@ -102,6 +102,11 @@ one that matters, because it attaches to the browser you already have open,
 with your tabs and your logins. Same engine either way; the connection reports
 which it is, and the declared `attach_to_user_session` capability is derived
 from that rather than asserted next to it.
+
+Both Chrome pipes pass the contract. To drive the browser you already have
+open, see [driving your own Chrome](docs/guides/chrome-extension.md) — note that
+`--load-extension` is silently ignored by Chrome stable, which is a memorable
+afternoon if nobody tells you.
 
 Safari's native half — the Swift accessibility helper that produces trusted
 background clicks — is ported and working. Its perception half needs the Safari
