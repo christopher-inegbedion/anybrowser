@@ -7,7 +7,7 @@ whether it works.
 ## Setup
 
 ```bash
-git clone https://github.com/relaykit/relaykit && cd relaykit
+git clone https://github.com/christopher-inegbedion/relaykit && cd relaykit
 uv venv && uv pip install -e ".[dev]"
 uv run playwright install chromium
 uv run pytest                                             # unit tests

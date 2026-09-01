@@ -45,7 +45,7 @@ class ChromeEngine(BrowserEngine):
     async def probe(cls) -> None:
         raise EngineNotAvailable(
             "the Chrome engine is not ported yet; see docs/porting/chrome.md",
-            tracking="https://github.com/relaykit/relaykit/issues/1",
+            tracking="https://github.com/christopher-inegbedion/relaykit/issues/1",
         )
 
     def __init__(self, **_options: object) -> None:

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The name the user sees in System Settings > Privacy & Security when
+	     Accessibility is requested. It should read as the HOST application's
+	     name: as far as the user is concerned, this bundle is that app. -->
+	<key>CFBundleName</key>
+	<string>__APP_NAME__</string>
+	<key>CFBundleDisplayName</key>
+	<string>__APP_NAME__</string>
+	<key>CFBundleExecutable</key>
+	<string>RelayKitSafariEngine</string>
+	<!-- THE LOAD-BEARING LINE. This must be the SAME identifier as the host
+	     application that ships this helper.
+
+	     macOS keys TCC (the permission database) on code identity, so the
+	     Accessibility grant the user gives the host app covers this helper only
+	     when the two share an identifier. A distinct id means a second,
+	     unexplained entry in Privacy & Security that the user has to find and
+	     approve on its own — and until they do, every click and fill fails.
+	     Worse, a freshly-minted id is often refused with no prompt at all, so
+	     the failure looks like a broken engine rather than a missing grant.
+
+	     Embedders MUST pass their own: build_engine(bundle_id="com.example.app").
+	     The default below is a placeholder that will not have a grant. -->
+	<key>CFBundleIdentifier</key>
+	<string>__BUNDLE_ID__</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleVersion</key>
+	<string>__VERSION__</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<!-- Background helper: no Dock icon, no menu bar. It drives Safari and
+	     exits when its stdin closes. -->
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+</dict>
+</plist>

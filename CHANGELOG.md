@@ -25,6 +25,13 @@ and a `BREAKING:` entry here.
 - `SyncEngine`, a blocking facade owning exactly one event loop.
 - Three transports — `memory`, `unix`, `websocket` — each shipping a server and
   its matching client, and each passing the 10-test transport contract.
+- `relaykit.perception`: engine-agnostic DOM perception, with the deep-DOM
+  helpers (open and closed shadow roots, iframe coordinate mapping) ported from
+  Relay.
+- `CdpConnection`, the seam between the Chrome engine and its pipe, so the
+  DevTools WebSocket and extension-owned CDP share one engine.
+- `SafariBridge` and the Swift accessibility helper, with the host bundle
+  identifier as a build parameter — see `build_engine`.
 
 ### In progress
 

@@ -3,8 +3,8 @@
 ## Reporting a vulnerability
 
 **Do not open a public issue.** Report privately through
-[GitHub Security Advisories](https://github.com/relaykit/relaykit/security/advisories/new),
-or email `security@relaykit.dev`.
+[GitHub Security Advisories](https://github.com/christopher-inegbedion/relaykit/security/advisories/new),
+which needs no email address and keeps the report private until a fix ships.
 
 Include what you can: affected version, the engine or transport involved, a
 reproduction, and what an attacker gains. We aim to acknowledge within 3 working

@@ -90,8 +90,8 @@ Full walkthrough: [**Writing an engine**](docs/guides/writing-an-engine.md).
 | Engine | Attaches to your session | Trusted input | Conformance |
 |---|---|---|---|
 | `playwright` | no — own profile | yes | passing |
-| `chrome` | yes — extension-owned CDP | yes | porting ([#1](https://github.com/relaykit/relaykit/issues/1)) |
-| `safari` | yes — accessibility + extension | yes | porting ([#2](https://github.com/relaykit/relaykit/issues/2)) |
+| `chrome` | yes — extension-owned CDP | yes | porting ([#1](https://github.com/christopher-inegbedion/relaykit/issues/1)) |
+| `safari` | yes — accessibility + extension | yes | porting ([#2](https://github.com/christopher-inegbedion/relaykit/issues/2)) |
 
 `chrome` and `safari` are being ported out of Relay's daemon. Their interfaces,
 entry points and declared capabilities are fixed; the implementations are
@@ -131,7 +131,7 @@ docs/            architecture, guides, ADRs
 ## Contributing
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md). Good first issues are labelled
-[`good first issue`](https://github.com/relaykit/relaykit/labels/good%20first%20issue);
+[`good first issue`](https://github.com/christopher-inegbedion/relaykit/labels/good%20first%20issue);
 a new backend is the highest-value contribution there is, and the conformance
 suite means you can tell when it's done.
 
