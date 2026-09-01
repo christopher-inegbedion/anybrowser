@@ -179,8 +179,7 @@ class AgentRunner:
                     tools_tried = ", ".join(sorted({name for name, _ in recent}))
                     result.stop_reason = StopReason.STUCK
                     result.error = (
-                        f"{len(recent)} actions with no effect on the page "
-                        f"(tried: {tools_tried})"
+                        f"{len(recent)} actions with no effect on the page (tried: {tools_tried})"
                     )
                     break
         else:

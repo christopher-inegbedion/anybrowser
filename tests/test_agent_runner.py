@@ -145,7 +145,11 @@ async def test_alternating_actions_that_change_nothing_still_count_as_stuck():
     """
     engine = _Engine(clicks_work=False)
     alternating = _Scripted(
-        [d for _ in range(10) for d in (_click(), Decision(tool="look", arguments={}, narrative="re-read"))]
+        [
+            d
+            for _ in range(10)
+            for d in (_click(), Decision(tool="look", arguments={}, narrative="re-read"))
+        ]
     )
     runner = AgentRunner(engine, alternating, config=RunConfig(max_steps=20, repeat_limit=4))
     result = await runner.run("loop without repeating")

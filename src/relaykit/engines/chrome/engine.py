@@ -11,8 +11,10 @@ import asyncio
 import base64
 import contextlib
 import json
+import logging
 import os
 import platform
+import re
 import shutil
 import tempfile
 import urllib.error
@@ -53,10 +55,48 @@ from ...perception.dom import (
     build_snapshot,
     decode_handle,
 )
-from . import PLANNED_CAPABILITIES
-from .cdp import CdpConnection, DevToolsConnection
+from .cdp import (
+    SYNTHETIC_SESSION_PREFIX,
+    CdpConnection,
+    DevToolsConnection,
+    ExtensionConnection,
+)
 
-__all__ = ["ChromeEngine"]
+__all__ = ["PLANNED_CAPABILITIES", "ChromeEngine"]
+
+#: Ceiling for RelayKit's own page reads. Far below the CDP default, because
+#: these are milliseconds of work and a long wait means the reply is lost, not
+#: slow. See ChromeEngine._dom.
+_INTERNAL_READ_TIMEOUT = 8.0
+
+logger = logging.getLogger(__name__)
+
+#: Everything Chrome can do when reached through the extension pipe. The
+#: DevTools pipe drops ATTACH_TO_USER_SESSION, because the launch flag means it
+#: only ever reaches a browser started for automation -- see `capabilities`,
+#: which derives that from the live connection rather than restating it.
+#:
+#: Defined here rather than in __init__ so the engine does not import its own
+#: package: that is a circular import, and it fails at plugin-load time rather
+#: than at development time.
+PLANNED_CAPABILITIES = Capabilities.of(
+    Capability.ATTACH_TO_USER_SESSION,
+    Capability.TRUSTED_INPUT,
+    Capability.BACKGROUND_INPUT,
+    Capability.EVALUATE_JS,
+    Capability.CROSS_ORIGIN_FRAMES,
+    Capability.OFFSCREEN_SCREENSHOT,
+    Capability.FULL_PAGE_SCREENSHOT,
+    Capability.SCREENCAST,
+    Capability.POINTER_GESTURES,
+    Capability.FILE_UPLOAD,
+    Capability.JS_DIALOGS,
+    Capability.COOKIES,
+    Capability.NETWORK_INTERCEPTION,
+    Capability.TAB_MANAGEMENT,
+    Capability.PAGE_ZOOM,
+    Capability.INIT_SCRIPTS,
+)
 
 _CHROME_PATHS = (
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -107,6 +147,8 @@ class ChromeEngine(BrowserEngine):
         launch: bool = True,
         chrome_path: str = "",
         user_data_dir: str = "",
+        extension_port: int = 8787,
+        connect_timeout: float = 60.0,
         connection: CdpConnection | None = None,
     ) -> None:
         if mode not in {"devtools", "extension"}:
@@ -114,6 +156,10 @@ class ChromeEngine(BrowserEngine):
         self._mode = mode
         self._host = host
         self._port = port
+        #: Where the extension dials in. The engine listens, because a browser
+        #: extension can only make connections, never accept them.
+        self._extension_port = extension_port
+        self._connect_timeout = connect_timeout
         self._headless = headless
         self._launch = launch
         self._chrome_path = chrome_path
@@ -153,9 +199,17 @@ class ChromeEngine(BrowserEngine):
     async def info(self) -> EngineInfo:
         version = ""
         product = "Chrome"
-        if self._connection is not None:
+        connection = self._connection
+        if isinstance(connection, ExtensionConnection):
+            # Browser.getVersion is one of the domains chrome.debugger refuses,
+            # so the extension reports the user agent in its hello instead.
+            agent = connection.browser_description
+            match = re.search(r"Chrome/(\S+)", agent)
+            if match:
+                version = match.group(1)
+        elif connection is not None:
             with contextlib.suppress(Exception):
-                data = await self._connection.send("Browser.getVersion")
+                data = await connection.send("Browser.getVersion")
                 product_version = str(data.get("product") or "")
                 if product_version:
                     product, _, version = product_version.partition("/")
@@ -171,15 +225,15 @@ class ChromeEngine(BrowserEngine):
     async def start(self) -> None:
         if self._session_id:
             return
-        if self._mode == "extension":
-            raise CapabilityNotSupported(
-                "Chrome extension mode is not implemented; see docs/porting/chrome.md",
-                capability=Capability.ATTACH_TO_USER_SESSION.value,
-                engine=self.name,
-            )
-
         if self._connection is None:
-            self._connection = DevToolsConnection(host=self._host, port=self._port)
+            if self._mode == "extension":
+                self._connection = ExtensionConnection(
+                    host=self._host,
+                    port=self._extension_port,
+                    connect_timeout=self._connect_timeout,
+                )
+            else:
+                self._connection = DevToolsConnection(host=self._host, port=self._port)
         self._connection.on_event(self._on_event)
         try:
             try:
@@ -189,7 +243,10 @@ class ChromeEngine(BrowserEngine):
                     raise
                 await self._launch_chrome()
                 await self._connection.connect()
-            await self._attach_page()
+            if isinstance(self._connection, ExtensionConnection):
+                await self._attach_via_extension()
+            else:
+                await self._attach_page()
         except Exception:
             await self.close()
             raise
@@ -307,6 +364,32 @@ class ChromeEngine(BrowserEngine):
         for domain in ("Page", "Runtime", "DOM", "Network"):
             await self._send(f"{domain}.enable")
 
+    async def _attach_via_extension(self) -> None:
+        """Adopt a tab in the user's own browser.
+
+        There is no target/session dance here: ``chrome.debugger`` is addressed
+        by *tab*, and the extension attaches on first use. So picking a tab is
+        the whole of it -- the active one, because that is the window the person
+        is actually looking at.
+        """
+        connection = self._connection
+        assert isinstance(connection, ExtensionConnection)
+        listing = await connection.request("tabs")
+        tabs = [t for t in listing.get("tabs", ()) if t.get("tab_id")]
+        if not tabs:
+            raise EngineNotAvailable("the browser reported no tabs")
+        chosen = next((t for t in tabs if t.get("active")), tabs[0])
+        connection.set_tab(int(chosen["tab_id"]))
+        self._target_id = str(chosen["tab_id"])
+        # A session id is the DevTools pipe's way of naming a tab; the extension
+        # names it per message. Recording a synthetic one keeps every
+        # started/not-started check identical across both pipes -- the
+        # connection strips it before anything reaches chrome.debugger.
+        self._session_id = f"{SYNTHETIC_SESSION_PREFIX}{chosen['tab_id']}"
+        for domain in ("Page", "Runtime", "DOM"):
+            with contextlib.suppress(Exception):
+                await self._send(f"{domain}.enable")
+
     def _require_connection(self) -> CdpConnection:
         if self._connection is None:
             raise ActionFailed("engine is not started")
@@ -388,22 +471,61 @@ class ChromeEngine(BrowserEngine):
         return remote
 
     async def _dom(self, script: str, argument: Mapping[str, Any]) -> Any:
+        """Run one of RelayKit's own page scripts.
+
+        Bounded and retried once, which the public :meth:`evaluate` is not.
+        Driving through an extension means a service worker relays every
+        command, and it occasionally loses a reply -- most often when a
+        navigation tears the execution context down underneath an in-flight
+        ``Runtime.evaluate``. Waiting out the full timeout for a reply that is
+        never coming turns a 30ms read into a 30s stall.
+
+
+        Retrying is safe *here* and only here: these scripts are RelayKit's own
+        and are idempotent reads. Retrying arbitrary caller script would run
+        their side effects twice, so :meth:`evaluate` keeps the full timeout and
+        a single attempt.
+        """
         expression = f"({script})({json.dumps(dict(argument), separators=(',', ':'))})"
-        return await self._runtime_evaluate(expression)
+        return await self._internal_evaluate(expression)
+
+    async def _internal_evaluate(self, expression: str) -> Any:
+        """Evaluate one of RelayKit's own expressions: bounded, and retried once.
+
+        Every internal read goes through here -- url, title, the page scripts,
+        the change signature -- so the policy lives in one place.
+
+        Driving through an extension means a service worker relays each command,
+        and it occasionally loses a reply; most often when a navigation tears the
+        execution context down underneath an in-flight ``Runtime.evaluate``.
+        Waiting out the default CDP timeout turns a 30ms read into a 30s stall.
+
+        Retrying is safe *here* and only here: these expressions are RelayKit's
+        own and are idempotent. Retrying arbitrary caller script would run their
+        side effects twice, so the public :meth:`evaluate` keeps the full
+        timeout and a single attempt.
+        """
+        try:
+            return await self._runtime_evaluate(expression, timeout=_INTERNAL_READ_TIMEOUT)
+        except EvaluationError as exc:
+            if "did not answer" not in str(exc):
+                raise
+            logger.debug("page read lost its reply; retrying once")
+            return await self._runtime_evaluate(expression, timeout=_INTERNAL_READ_TIMEOUT)
 
     async def _read(self, operation: str, **options: Any) -> Any:
         return await self._dom(READ_SCRIPT, {"op": operation, **options})
 
     async def url(self) -> str:
-        # Target inspection belongs to the browser session, not the attached
-        # page session. Some Chrome versions reject it when session-routed.
-        info = await self._require_connection().send(
-            "Target.getTargetInfo", {"targetId": self._target_id}
-        )
-        return str((info.get("targetInfo") or {}).get("url") or "")
+        # `chrome.debugger` refuses browser-level domains outright -- Target.*
+        # and Browser.* come back as "Not allowed" -- so Target.getTargetInfo
+        # works on the DevTools pipe and cannot work on the extension one.
+        # location.href works on both, and is what the page would report anyway.
+        value = await self._internal_evaluate("document.location.href")
+        return str(value or "")
 
     async def title(self) -> str:
-        value = await self._runtime_evaluate("document.title")
+        value = await self._internal_evaluate("document.title")
         return str(value or "")
 
     async def viewport(self) -> Viewport:
@@ -695,8 +817,28 @@ class ChromeEngine(BrowserEngine):
     async def scroll(
         self, delta_x: float, delta_y: float, *, at: Point | None = None
     ) -> ActionOutcome:
+        limits = await self._read("viewport")
         before = await self.viewport()
         point = at or Point(before.width / 2, before.height / 2)
+
+        # Ask the page whether it can move before telling the browser to move
+        # it. Chrome acknowledges a wheel event only once the compositor has
+        # handled it, and at the scroll limit that acknowledgement may never
+        # arrive -- and because CDP commands for one debuggee are serialised, an
+        # unacknowledged wheel blocks every later command behind it. Over the
+        # DevTools pipe this is rare enough to look like flakiness; through an
+        # extension relay it is reproducible. So the cheap read below is not an
+        # optimisation, it is what stops the pipe wedging.
+        at_limit = (delta_y > 0 and before.scroll_y >= float(limits.get("maxScrollY", 0)) - 1) or (
+            delta_y < 0 and before.scroll_y <= 0
+        )
+        if at_limit and not delta_x:
+            return ActionOutcome.no_change(
+                "already at the scroll limit",
+                scroll_x=before.scroll_x,
+                scroll_y=before.scroll_y,
+            )
+
         await self._send(
             "Input.dispatchMouseEvent",
             {

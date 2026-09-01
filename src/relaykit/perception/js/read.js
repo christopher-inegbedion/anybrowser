@@ -10,14 +10,26 @@ __RELAYKIT_DEEP_DOM_HELPERS__
   const node = (i) => nodes[i] || null;
 
   switch (request.op) {
-    case 'viewport':
+    case 'viewport': {
+      // maxScroll* lets a caller answer "can this page scroll further?" without
+      // dispatching a wheel event to find out. That matters more than it looks:
+      // a wheel at the scroll limit may never be acknowledged by the compositor,
+      // and an unacknowledged input command blocks every later command on the
+      // same debuggee behind it.
+      const doc = document.documentElement;
+      const body = document.body;
+      const scrollWidth = Math.max(doc ? doc.scrollWidth : 0, body ? body.scrollWidth : 0);
+      const scrollHeight = Math.max(doc ? doc.scrollHeight : 0, body ? body.scrollHeight : 0);
       return {
         width: window.innerWidth,
         height: window.innerHeight,
         scrollX: window.scrollX,
         scrollY: window.scrollY,
         dpr: window.devicePixelRatio || 1,
+        maxScrollX: Math.max(0, scrollWidth - window.innerWidth),
+        maxScrollY: Math.max(0, scrollHeight - window.innerHeight),
       };
+    }
 
     case 'box': {
       const el = node(request.index);

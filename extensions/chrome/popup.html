@@ -1,0 +1,17 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>RelayKit Bridge</title>
+<style>
+  body { font: 13px/1.5 system-ui, sans-serif; margin: 0; padding: 14px; width: 260px; }
+  h1 { font-size: 13px; margin: 0 0 10px; }
+  label { display: block; font-size: 11px; color: #666; margin-bottom: 4px; }
+  input { width: 100%; box-sizing: border-box; padding: 5px 6px; font-family: ui-monospace, monospace; }
+  button { margin-top: 8px; padding: 5px 10px; }
+  #status { margin-top: 10px; font-size: 12px; }
+</style>
+<h1>RelayKit Bridge</h1>
+<label for="endpoint">Engine endpoint</label>
+<input id="endpoint" spellcheck="false" placeholder="ws://127.0.0.1:8787">
+<button id="save">Save &amp; reconnect</button>
+<div id="status">…</div>
+<script src="popup.js"></script>
