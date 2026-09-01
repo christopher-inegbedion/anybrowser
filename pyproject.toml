@@ -46,8 +46,9 @@ dev = [
     "mypy>=1.11",
 ]
 
-[project.scripts]
-relaykit = "relaykit.cli.main:main"
+# No [project.scripts] yet. A console script pointing at an unwritten module
+# means `pip install relaykit && relaykit` fails with ModuleNotFoundError, which
+# is a worse first impression than having no CLI at all.
 
 # Registered as a pytest plugin so `--engine` works from any rootdir, which is
 # what makes `pytest --pyargs relaykit_conformance --engine yours` a one-liner
@@ -65,9 +66,9 @@ websocket = "relaykit.daemon.transports.websocket:WebSocketTransport"
 unix = "relaykit.daemon.transports.unix:UnixSocketTransport"
 memory = "relaykit.daemon.transports.memory:MemoryTransport"
 
-[project.entry-points."relaykit.models"]
-openai = "relaykit.models.openai_compatible:OpenAICompatibleProvider"
-anthropic = "relaykit.models.anthropic:AnthropicProvider"
+# No shipped model providers yet. ModelProvider is defined and registrable; the
+# entry points appear when the implementations do. Advertising a plugin whose
+# module does not exist is the same lie as declaring a capability you lack.
 
 [project.urls]
 Homepage = "https://github.com/christopher-inegbedion/relaykit"
