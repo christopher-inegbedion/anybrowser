@@ -90,9 +90,9 @@ Full walkthrough: [**Writing an engine**](docs/guides/writing-an-engine.md).
 | Engine | Attaches to your session | Trusted input | Conformance |
 |---|---|---|---|
 | `chrome` (DevTools) | no — needs the launch flag | yes | **28 passed, 4 skipped** |
-| `chrome` (extension) | yes — extension-owned CDP | yes | porting ([#1](https://github.com/christopher-inegbedion/relaykit/issues/1)) |
+| `chrome` (extension) | yes — extension-owned CDP | yes | porting ([#3](https://github.com/christopher-inegbedion/relaykit/issues/3)) |
 | `playwright` | no — own profile | yes | **28 passed, 4 skipped** |
-| `safari` | yes — accessibility + extension | yes | porting ([#2](https://github.com/christopher-inegbedion/relaykit/issues/2)) |
+| `safari` | yes — accessibility + extension | yes | porting ([#4](https://github.com/christopher-inegbedion/relaykit/issues/4)) |
 
 The Chrome engine has two pipes behind one interface. `devtools` talks to a
 browser started with `--remote-debugging-port` — standard, and the only mode

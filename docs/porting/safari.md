@@ -1,6 +1,6 @@
 # Porting: the Safari engine
 
-**Tracking:** [#2](https://github.com/christopher-inegbedion/relaykit/issues/2) · **Status:** in progress
+**Tracking:** [#4](https://github.com/christopher-inegbedion/relaykit/issues/4) · **Status:** native half done and verified; perception half outstanding
 
 ## What it is
 

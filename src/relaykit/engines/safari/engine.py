@@ -118,7 +118,7 @@ class SafariEngine(BrowserEngine):
         raise EngineNotAvailable(
             "the Safari engine needs its Web Extension for perception, which is "
             "not written yet; see docs/porting/safari.md",
-            tracking="https://github.com/christopher-inegbedion/relaykit/issues/2",
+            tracking="https://github.com/christopher-inegbedion/relaykit/issues/4",
         )
 
     @property

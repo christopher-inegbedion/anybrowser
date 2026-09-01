@@ -1,13 +1,24 @@
 # Porting: the Chrome engine
 
-**Tracking:** [#1](https://github.com/christopher-inegbedion/relaykit/issues/1) · **Status:** in progress
+**Tracking:** [#3](https://github.com/christopher-inegbedion/relaykit/issues/3) · **Status:** `devtools` pipe done (28 passed, 4 skipped); `extension` pipe outstanding
 
 ## What it is
 
-CDP, but the debugger session belongs to a browser extension rather than to a
-launched-with-`--remote-debugging-port` process. That is the whole reason this
-engine exists: it attaches to the browser the user already has open, with their
-tabs and their logins, which no launcher-based automation can do.
+One engine, two pipes ([`cdp.py`](../../src/relaykit/engines/chrome/cdp.py)).
+
+`devtools` — **done** — is a direct WebSocket to a browser started with
+`--remote-debugging-port`. Standard, dependency-light, and the only mode that
+can run in CI, because it can launch its own browser.
+
+`extension` — **outstanding** — relays CDP through a browser extension holding a
+`chrome.debugger` session. That is the whole reason this engine exists: it
+attaches to the browser the user already has open, with their tabs and their
+logins, which no launcher-based automation can do.
+
+They differ only in transport, so the engine is written once. The connection
+reports whether it reaches a real user session and the declared
+`ATTACH_TO_USER_SESSION` capability is derived from it, so the two cannot
+disagree.
 
 ```
 engine  ──JSON over WS──▶  daemon  ──chrome.debugger──▶  extension  ──▶  the page
