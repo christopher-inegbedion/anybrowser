@@ -26,6 +26,7 @@ Three steps, and the first one has a trap.
 
 ```python
 from relaykit.engines.safari import build_engine
+
 build_engine("~/.relaykit", bundle_id="com.example.yourapp", app_name="Your App")
 ```
 
