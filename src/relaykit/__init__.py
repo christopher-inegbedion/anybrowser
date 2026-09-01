@@ -54,7 +54,7 @@ async def open_engine(name: str, /, **options: Any) -> BrowserEngine:
     """
     cls = engine_registry.get(name)
     await cls.probe()
-    engine = cls(**options)
+    engine: BrowserEngine = cls(**options)
     await engine.start()
     return engine
 

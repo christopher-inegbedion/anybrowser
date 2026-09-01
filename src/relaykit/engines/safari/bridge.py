@@ -121,7 +121,7 @@ class SafariBridge:
                     # that is not the answer we are waiting for.
                     if reply.get("id") != message_id:
                         continue
-                    return reply
+                    return dict(reply)
 
             try:
                 reply = await asyncio.wait_for(_await_reply(), timeout)
@@ -130,7 +130,7 @@ class SafariBridge:
 
         if not reply.get("ok"):
             raise SafariBridgeError(str(reply.get("error") or f"{cmd} failed"))
-        return reply
+        return dict(reply)
 
     # ------------------------------------------------------------------ #
     # Commands                                                            #

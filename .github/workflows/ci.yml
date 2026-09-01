@@ -41,8 +41,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          python-version: ${{ matrix.python }}
-      - run: uv venv && uv pip install -e ".[dev]"
+      - run: uv python install ${{ matrix.python }}
+      - run: uv venv --python ${{ matrix.python }}
+      - run: uv pip install -e ".[dev]"
       - run: uv run pytest --cov=relaykit --cov-report=xml -q
 
   conformance:
@@ -58,7 +59,11 @@ jobs:
           # Chrome runs its DevTools pipe here; the extension pipe cannot be
           # exercised without a real browser profile. See docs/porting/chrome.md.
           - { engine: chrome, os: ubuntu-latest, required: true }
-          - { engine: safari, os: macos-latest, required: false }
+          # Safari's perception half is unwritten, so probe() refuses and the
+          # whole contract skips. Running it anyway is not theatre: it proves
+          # the engine imports on macOS and refuses *cleanly*, which is the
+          # behaviour the registry depends on to fall through to another engine.
+          - { engine: safari, os: macos-latest, required: true }
     continue-on-error: ${{ !matrix.required }}
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +73,11 @@ jobs:
       - run: uv venv && uv pip install -e ".[dev]"
       - run: uv run playwright install --with-deps chromium
         if: matrix.engine == 'playwright'
-      - run: uv run pytest --pyargs relaykit_conformance --engine ${{ matrix.engine }} -q
+      # The Chrome engine launches a real Chrome; the runner image does not
+      # always have one where it looks.
+      - uses: browser-actions/setup-chrome@v1
+        if: matrix.engine == 'chrome'
+      - run: uv run pytest --pyargs relaykit_conformance --engine ${{ matrix.engine }} -q -rs
 
   transports:
     name: conformance (transport ${{ matrix.transport }})
@@ -83,7 +92,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv venv && uv pip install -e ".[dev]"
-      - run: uv run pytest --pyargs relaykit_conformance --transport ${{ matrix.transport }} -q
+      - run: uv run pytest --pyargs relaykit_conformance --transport ${{ matrix.transport }} -q -rs
 
   build:
     name: wheel is not a lie

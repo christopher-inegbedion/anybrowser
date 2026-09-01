@@ -23,7 +23,7 @@ import logging
 from collections.abc import Iterator
 from dataclasses import dataclass
 from importlib.metadata import EntryPoint, entry_points
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from .errors import RelayKitError
 
@@ -89,7 +89,8 @@ class Registry(Generic[T]):
             available = ", ".join(self.names()) or "none installed"
             raise PluginNotFound(f"no {self.group} plugin named {name!r}", available=available)
         try:
-            return ep.load()
+            loaded: type[T] = ep.load()
+            return loaded
         except Exception as exc:  # pragma: no cover - depends on third-party code
             raise PluginNotFound(
                 f"{self.group} plugin {name!r} failed to import: {exc}", plugin=name
@@ -103,8 +104,8 @@ class Registry(Generic[T]):
 
 
 #: Browser backends. See :mod:`relaykit.core.engine`.
-engines: Registry = Registry(ENGINE_GROUP)
+engines: Registry[Any] = Registry(ENGINE_GROUP)
 #: Daemon transports. See :mod:`relaykit.daemon.transport`.
-transports: Registry = Registry(TRANSPORT_GROUP)
+transports: Registry[Any] = Registry(TRANSPORT_GROUP)
 #: LLM providers. See :mod:`relaykit.models.provider`.
-models: Registry = Registry(MODEL_GROUP)
+models: Registry[Any] = Registry(MODEL_GROUP)

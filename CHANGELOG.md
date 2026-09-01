@@ -38,6 +38,17 @@ and a `BREAKING:` entry here.
 - `SafariBridge` and the Swift accessibility helper, with the host bundle
   identifier as a build parameter — see `build_engine`.
 
+### Fixed
+
+- `relaykit.engines` (the subpackage) shadowed the engine registry re-exported
+  under the same name, so `available_engines()` raised on a fresh install while
+  working in a checkout.
+- `ActionOutcome.failure` was called with `detail` both positionally and by
+  keyword in the Playwright engine's `select_option`, which would have raised
+  `TypeError` on any unmatched option.
+- `press_key` on Chrome sent text-bearing keys as `rawKeyDown`, stalling the
+  input queue so the *next* command hung until timeout.
+
 ### In progress
 
 - `ChromeEngine` in `extension` mode — CDP relayed through a browser extension,

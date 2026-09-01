@@ -74,10 +74,11 @@ firefox = "my_package.engine:FirefoxEngine"
 ```
 
 ```bash
-pytest --pyargs relaykit_conformance --engine firefox
+pytest --pyargs relaykit_conformance --engine firefox     # the engine contract
+pytest --pyargs relaykit_conformance --transport grpc     # the transport one
 ```
 
-The suite is capability-gated. A backend that honestly declares it cannot drag
+Each flag selects a contract and skips the other. The suite is capability-gated. A backend that honestly declares it cannot drag
 is skipped, not failed. A backend that *claims* it can drag and then doesn't is
 failed — the suite tests truthfulness as hard as it tests function.
 

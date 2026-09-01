@@ -199,10 +199,10 @@ class PlaywrightEngine(BrowserEngine):
     # ------------------------------------------------------------------ #
 
     async def url(self) -> str:
-        return self._require_page().url
+        return str(self._require_page().url)
 
     async def title(self) -> str:
-        return await self._require_page().title()
+        return str(await self._require_page().title())
 
     async def viewport(self) -> Viewport:
         data = await self._eval(READ_JS, {"op": "viewport"})
@@ -461,7 +461,9 @@ class PlaywrightEngine(BrowserEngine):
         )
         if not result or not result.get("ok"):
             return ActionOutcome.failure(
-                "no matching option", detail=str(result), **{"target": target.description}
+                "no matching option",
+                target=target.description,
+                available=(result or {}).get("available", []),
             )
         return ActionOutcome(ok=True, changed=True, detail=f"selected {result['value']}")
 
@@ -566,7 +568,8 @@ class PlaywrightEngine(BrowserEngine):
     async def cookies(self, urls: Sequence[str] = ()) -> Sequence[Mapping[str, Any]]:
         if self._context is None:
             return ()
-        return await self._context.cookies(list(urls) or None)
+        cookies: Sequence[Mapping[str, Any]] = await self._context.cookies(list(urls) or None)
+        return cookies
 
     async def set_cookies(self, cookies: Sequence[Mapping[str, Any]]) -> None:
         if self._context is None:

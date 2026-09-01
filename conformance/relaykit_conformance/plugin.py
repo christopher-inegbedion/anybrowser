@@ -13,6 +13,8 @@ from typing import Any
 import pytest
 
 from relaykit.core import BrowserEngine, Capability, engines
+from relaykit.core.errors import EngineNotAvailable
+from relaykit.core.registry import PluginNotFound
 
 PAGES = Path(__file__).parent / "pages"
 
@@ -22,8 +24,8 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption(
         "--engine",
         action="store",
-        default="fake",
-        help="Name of the relaykit engine to test (default: fake).",
+        default="",
+        help="Name of the relaykit engine to test. Without it, the engine contract is skipped.",
     )
     group.addoption(
         "--engine-option",
@@ -35,8 +37,9 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption(
         "--transport",
         action="store",
-        default="memory",
-        help="Name of the relaykit transport to test (default: memory).",
+        default="",
+        help="Name of the relaykit transport to test. Without it, the transport "
+        "contract is skipped.",
     )
 
 
@@ -108,10 +111,20 @@ def engine(
     event_loop: asyncio.AbstractEventLoop,
 ) -> Iterator[BrowserEngine]:
     name = pytestconfig.getoption("--engine")
+    if not name:
+        pytest.skip("no --engine given")
     try:
         cls = engines.get(name)
-    except Exception as exc:
+    except PluginNotFound as exc:
         raise pytest.UsageError(f"cannot load engine {name!r}: {exc}") from exc
+
+    # An engine that refuses from probe() is unavailable *here* -- no Chrome
+    # installed, not macOS, a helper that was never built. That is a skip, not
+    # an error: the suite is reporting on this machine, not failing the engine.
+    try:
+        event_loop.run_until_complete(cls.probe())
+    except EngineNotAvailable as exc:
+        pytest.skip(f"{name} is not available here: {exc}")
 
     instance = cls(**engine_options)
     event_loop.run_until_complete(instance.start())

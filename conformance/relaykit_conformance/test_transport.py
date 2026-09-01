@@ -19,7 +19,10 @@ from relaykit.daemon.protocol import Event, Request, Response, decode, encode
 
 @pytest.fixture
 def transport_name(pytestconfig: pytest.Config) -> str:
-    return pytestconfig.getoption("--transport")
+    name = pytestconfig.getoption("--transport")
+    if not name:
+        pytest.skip("no --transport given")
+    return str(name)
 
 
 @pytest.fixture

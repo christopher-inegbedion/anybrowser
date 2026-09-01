@@ -50,11 +50,14 @@ browser holding the user's live sessions. A transport that defaults to
 
 ## Testing
 
-Point the daemon test suite at yours:
+Point the conformance suite at yours:
 
 ```bash
-pytest --pyargs relaykit.daemon.tests --transport grpc
+pytest --pyargs relaykit_conformance --transport grpc
 ```
+
+The package holds both contracts; naming `--transport` runs the transport one
+and skips the engine one.
 
 It checks framing, concurrent requests, event fan-out, one-client-fails
 isolation, and clean shutdown under load.
