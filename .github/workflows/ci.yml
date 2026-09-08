@@ -85,7 +85,7 @@ jobs:
         if: matrix.engine == 'playwright'
       # The Chrome engine launches a real Chrome; the runner image does not
       # always have one where it looks.
-      - uses: browser-actions/setup-chrome@v1
+      - uses: browser-actions/setup-chrome@v2
         if: matrix.engine == 'chrome'
       - run: uv run pytest --pyargs relaykit_conformance --engine ${{ matrix.engine }} -q -rs
 
