@@ -79,4 +79,18 @@
       return Promise.resolve({ error: String((err && err.message) || err) });
     }
   });
+
+  // Announce this page to the background half.
+  //
+  // The reply is discarded; sending is the point. Safari loads extension
+  // background content lazily and does not load it merely because the
+  // extension is enabled, so the bridge -- which dials the engine when its
+  // background page loads -- would otherwise never come up. Delivering a
+  // message is what starts that page, which makes loading or switching to any
+  // page enough to bring the bridge up, with no click.
+  //
+  // Nothing here waits on the result: when the background page is already
+  // running this is a no-op it ignores, and when there is no receiver at all
+  // the rejection is swallowed rather than logged on every page load.
+  browser.runtime.sendMessage({ kind: "page_awake", url: location.href }).catch(() => {});
 })();

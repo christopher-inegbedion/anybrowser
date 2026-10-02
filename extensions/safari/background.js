@@ -126,6 +126,7 @@ const connect = async () => {
   socket.onopen = () => {
     reconnectDelay = RECONNECT_MIN_MS;
     send({ type: "hello", protocol_version: PROTOCOL_VERSION, browser: navigator.userAgent });
+    showState();
   };
 
   socket.onmessage = async (event) => {
@@ -145,6 +146,7 @@ const connect = async () => {
 
   socket.onclose = () => {
     socket = null;
+    showState();
     scheduleReconnect();
   };
   socket.onerror = () => {
@@ -158,3 +160,51 @@ const scheduleReconnect = () => {
 };
 
 connect();
+
+
+// --------------------------------------------------------------------------
+// The toolbar button
+// --------------------------------------------------------------------------
+//
+// Clicking it is how a person brings the bridge up, and it works because the
+// *browser* dispatches this event: Safari has to load this page to deliver it,
+// and loading it already ran connect() above.
+//
+// Two designs that do not work, both measured rather than guessed:
+//
+//   * A `default_popup`. The popup is its own page, and a message from it to an
+//     unloaded background page has no receiver -- Safari will not start this
+//     page to deliver one, so the popup reports a bridge that is not there.
+//     Declaring a popup is also actively harmful: Safari then shows it INSTEAD
+//     of its own per-site permission menu, so the button can no longer be used
+//     to grant the extension access to a site.
+//   * Waiting for a content script to announce itself. Safari injects no
+//     content script until the site is permitted, so injection cannot be the
+//     thing that gets the bridge going on a fresh install. It is a useful
+//     second path once permission exists, and nothing more.
+
+const showState = async () => {
+  const url = await endpoint();
+  const live = !!socket && socket.readyState === WebSocket.OPEN;
+  try {
+    await browser.action.setBadgeText({ text: live ? "on" : "" });
+    await browser.action.setTitle({
+      title: live
+        ? `AnyBrowser Bridge \u2014 connected to ${url}`
+        : `AnyBrowser Bridge \u2014 waiting for the engine at ${url}`,
+    });
+  } catch {
+    // The badge is cosmetic. Never let it fail a connection.
+  }
+};
+
+browser.action.onClicked.addListener(() => {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    showState();
+    return;
+  }
+  // This click is the wake. Dial now rather than waiting out the backoff.
+  reconnectDelay = RECONNECT_MIN_MS;
+  connect();
+});
+

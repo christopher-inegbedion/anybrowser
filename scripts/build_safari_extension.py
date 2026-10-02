@@ -64,7 +64,12 @@ def build() -> int:
     (EXTENSION / "perception.js").write_text("".join(parts))
     print("built perception.js")
 
-    for required in ("manifest.json", "background.html", "background.js", "content.js"):
+    for required in (
+        "manifest.json",
+        "background.html",
+        "background.js",
+        "content.js",
+    ):
         if not (EXTENSION / required).exists():
             print(f"missing {required}", file=sys.stderr)
             return 1
@@ -119,6 +124,7 @@ def convert(
         return 0
     project = out_dir / app_name / f"{app_name}.xcodeproj"
     _nest_bundle_ids(project, bundle_id)
+    identity = _signing_identity()
     derived = out_dir / "DerivedData"
     subprocess.run(
         [
@@ -131,7 +137,7 @@ def convert(
             "Release",
             "-derivedDataPath",
             str(derived),
-            "CODE_SIGN_IDENTITY=-",
+            f"CODE_SIGN_IDENTITY={identity or '-'}",
             "CODE_SIGN_STYLE=Manual",
             "DEVELOPMENT_TEAM=",
             "build",
@@ -141,8 +147,47 @@ def convert(
     )
     app = derived / "Build" / "Products" / "Release" / f"{app_name}.app"
     print(f"built {app}")
-    print("open it once, then enable the extension in Safari ▸ Settings ▸ Extensions")
+    if identity:
+        print(f"signed with: {identity}")
+        print("open it once, then enable the extension in Safari ▸ Settings ▸ Extensions")
+    else:
+        print(
+            "WARNING: signed ad-hoc, because no code-signing identity was found.\n"
+            "Safari IGNORES an ad-hoc-signed extension: it will not appear in\n"
+            "Settings ▸ Extensions, nothing is logged, and 'Allow unsigned\n"
+            "extensions' does not cover it. Install an Apple Development identity\n"
+            "and build again, or the extension half cannot be used at all.",
+            file=sys.stderr,
+        )
     return 0
+
+
+def _signing_identity() -> str:
+    """A code-signing identity to build with, or "" if the Mac has none.
+
+    Not a nicety. Safari ignores an ad-hoc-signed extension outright -- absent
+    from Settings, nothing in the unified log -- so a build that defaults to
+    ``CODE_SIGN_IDENTITY=-`` produces an app whose extension half can never be
+    enabled. "Allow unsigned extensions" does not help; that setting is for
+    development-signed builds.
+
+    Prefers Developer ID (distributable) over Apple Development (this machine).
+    """
+    try:
+        listing = subprocess.run(
+            ["security", "find-identity", "-v", "-p", "codesigning"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except (subprocess.CalledProcessError, OSError):
+        return ""
+    names = re.findall(r'"([^"]+)"', listing)
+    for preferred in ("Developer ID Application", "Apple Development"):
+        for name in names:
+            if name.startswith(preferred):
+                return name
+    return names[0] if names else ""
 
 
 def _nest_bundle_ids(project: Path, bundle_id: str) -> None:
