@@ -86,14 +86,24 @@ the page, which is a useful second route.
 
 ## Two traps when iterating
 
-**Reinstalling the app duplicates the extension and resets site permissions.**
-Replacing the containing app leaves Safari's previous registration in place and
-adds another, so Settings ▸ Extensions lists the extension twice with no way to
-tell which one is live, while `pluginkit` reports only one. The per-site grants
-go with it, and Safari injects no content script until a site is permitted
-again — so perception stops working and the contract skips. Remove the stale
-entry and re-grant access after any reinstall, or overwrite the bundle in place
-rather than deleting and copying it.
+**Replacing the app duplicates the extension and resets site permissions, so
+update it in place.** Deleting the old bundle and copying a new one leaves
+Safari's previous registration behind and adds another: Settings ▸ Extensions
+lists the extension twice with no way to tell which one is live, while
+`pluginkit` reports only one. The per-site grants go with it, and Safari injects
+no content script until a site is permitted again — so perception stops working
+and the contract skips, for reasons that look nothing like their cause.
+
+Use the build script's installer, which rsyncs into the existing bundle instead:
+
+```bash
+python scripts/build_safari_extension.py --convert build/ --install
+```
+
+Measured: two consecutive in-place updates left Safari's entry count unchanged,
+where a delete-and-copy added one each time. If you already have duplicates,
+remove the stale ones in Settings ▸ Extensions once — in-place updates will not
+add more.
 
 **Enabled is not permitted.** The tick in Settings ▸ Extensions, and the "can
 read and alter web pages you visit" banner, describe what the extension is
