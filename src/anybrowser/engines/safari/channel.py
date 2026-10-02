@@ -160,18 +160,20 @@ class SafariExtensionChannel:
 
         if not reply.get("ok"):
             raise EngineError(str(reply.get("error") or f"{kind} failed"))
-        if "result" not in reply:
-            # A command that answers nothing. Not the same as answering null,
-            # and not the same as the page failing to answer -- see below.
-            return {}
-        result = reply["result"]
+        result = reply.get("result")
         if result is None:
             # The extension forwarded a request to a content script that did not
-            # answer. Overwhelmingly this means no content script is running in
-            # that tab, and in Safari that means the *site* is not permitted --
-            # being enabled is a separate thing. Say that, rather than handing
-            # the caller a None it will fail on one frame later with an
-            # AttributeError that names nothing useful.
+            # answer. The reply carries no `result` at all in that case, because
+            # the forward produced `undefined` and JSON drops it -- so an absent
+            # key and an explicit null mean the same thing here, and neither is
+            # the same as a command that answers an empty object (navigate does,
+            # and that arrives as a present `{}`).
+            #
+            # Overwhelmingly this means no content script is running in that tab,
+            # and in Safari that means the *site* is not permitted -- being
+            # enabled is a separate thing. Saying so beats handing the caller a
+            # None, or an empty mapping it will crash on one field later with a
+            # KeyError that names nothing useful.
             raise EngineError(
                 f"the page did not answer {kind}: no content script is running in "
                 "that tab. Safari injects none until the site is permitted -- "
