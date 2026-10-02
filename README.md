@@ -88,12 +88,18 @@ Full walkthrough: [**Writing an engine**](docs/guides/writing-an-engine.md).
 
 ## Engine status
 
-| Engine | Attaches to your session | Trusted input | Conformance |
-|---|---|---|---|
-| `chrome` (DevTools) | no — needs the launch flag | yes | **28 passed, 4 skipped** |
-| `chrome` (extension) | **yes** — your own windows | yes | **29 passed, 19 skipped** |
-| `playwright` | no — own profile | yes | **28 passed, 4 skipped** |
-| `safari` | yes — accessibility + extension | yes | needs a local setup ([guide](docs/guides/safari-extension.md)) |
+| Engine | Attaches to your session | Trusted input | Engine contract | Gated by CI |
+|---|---|---|---|---|
+| `chrome` (DevTools) | no — needs the launch flag | yes | **29/29** | yes |
+| `chrome` (extension) | **yes** — your own windows | yes | **passes** (local run) | no — needs a browser with the extension loaded |
+| `playwright` | no — own profile | yes | **29/29** | yes, the reference engine |
+| `safari` | yes — accessibility + extension | yes | needs a local setup ([guide](docs/guides/safari-extension.md)) | only that it refuses cleanly off-setup |
+
+The contract is 29 tests. A run also reports skips — those are the transport and
+model contracts standing down because you did not pass `--transport` or
+`--model`, not gaps in the engine. Pointing the engine contract at the `remote`
+engine grades the whole daemon stack as well: **29/29 over both the memory and
+websocket transports.**
 
 The Chrome engine has two pipes behind one interface. `devtools` talks to a
 browser started with `--remote-debugging-port` — standard, and the only mode

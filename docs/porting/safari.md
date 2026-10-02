@@ -1,6 +1,6 @@
 # Porting: the Safari engine
 
-**Tracking:** [#4](https://github.com/christopher-inegbedion/relaykit/issues/4) · **Status:** native half done and verified; perception half outstanding
+**Status:** both halves done — the native Swift helper for input and capture, and the Web Extension for perception. Needs a local build and a one-time Accessibility grant, so it is not gated by CI beyond refusing cleanly when unbuilt. See [driving Safari](../guides/safari-extension.md).
 
 ## What it is
 

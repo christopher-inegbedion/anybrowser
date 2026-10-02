@@ -26,9 +26,11 @@ mouse.** Most interaction is better expressed as *activate this element* than as
 *click these pixels*, and the activate-form has background-capable
 implementations where the pixel-form does not.
 
-Status: the native half (:mod:`.bridge`) is ported and the perception half needs
-the Safari Web Extension, which is not written yet. ``probe()`` refuses until
-both are present rather than half-working. See ``docs/porting/safari.md``.
+Status: both halves are implemented -- the native one (:mod:`.bridge`) for input
+and capture, and the Safari Web Extension for perception. Each needs a local
+build and a one-time Accessibility grant, so ``probe()`` refuses when the helper
+is unbuilt rather than half-working. See ``docs/porting/safari.md`` and
+``docs/guides/safari-extension.md``.
 """
 
 from __future__ import annotations
