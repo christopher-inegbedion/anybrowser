@@ -10,6 +10,7 @@ no second copy to drift.
 
     python scripts/build_safari_extension.py                    # assemble
     python scripts/build_safari_extension.py --convert build/    # + macOS app
+    python scripts/build_safari_extension.py --convert build/ --install  # + install it
 """
 
 from __future__ import annotations
@@ -190,6 +191,38 @@ def _signing_identity() -> str:
     return names[0] if names else ""
 
 
+def install(app: Path, dest: Path = Path("/Applications")) -> Path:
+    """Put the built app in place, updating an existing bundle rather than replacing it.
+
+    Deleting the old bundle and copying a new one is the obvious way to do this
+    and it is the wrong way. Safari keeps its own registration of an extension,
+    and a delete-then-copy leaves the previous one behind while adding another:
+    Settings then lists the extension twice with no way to tell which is live,
+    while ``pluginkit`` reports a single copy. The extension's per-site
+    permissions go with it, and Safari injects no content script until a site is
+    permitted again -- so perception stops working and the conformance suite
+    skips, for reasons that look nothing like their cause.
+
+    ``rsync --delete`` into the existing bundle updates the contents in place:
+    same path, same bundle, one registration, grants intact. On a machine where
+    nothing is installed yet it is an ordinary copy.
+    """
+    target = dest / app.name
+    dest.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        # Trailing slashes matter: copy the *contents* into the existing bundle.
+        subprocess.run(
+            ["rsync", "-a", "--delete", f"{app}/", f"{target}/"],
+            check=True,
+            capture_output=True,
+        )
+        print(f"updated in place: {target}")
+    else:
+        subprocess.run(["cp", "-R", str(app), str(target)], check=True, capture_output=True)
+        print(f"installed: {target}")
+    return target
+
+
 def _nest_bundle_ids(project: Path, bundle_id: str) -> None:
     """Make the app's identifier the prefix of its extension's, in the project.
 
@@ -218,9 +251,19 @@ def _nest_bundle_ids(project: Path, bundle_id: str) -> None:
     pbxproj.write_text(pattern.sub(fix, text))
 
 
+def _build_dir(out_dir: Path, app_name: str = "AnyBrowser Bridge") -> Path:
+    return out_dir / "DerivedData" / "Build" / "Products" / "Release" / f"{app_name}.app"
+
+
 if __name__ == "__main__":
     code = build()
     if code == 0 and "--convert" in sys.argv:
-        target = Path(sys.argv[sys.argv.index("--convert") + 1])
-        code = convert(target)
+        out = Path(sys.argv[sys.argv.index("--convert") + 1])
+        code = convert(out)
+        if code == 0 and "--install" in sys.argv:
+            at = sys.argv.index("--install")
+            after = sys.argv[at + 1] if len(sys.argv) > at + 1 else ""
+            dest = Path(after) if after and not after.startswith("--") else Path("/Applications")
+            app = install(_build_dir(out), dest)
+            subprocess.run(["open", str(app)], check=False)
     raise SystemExit(code)
