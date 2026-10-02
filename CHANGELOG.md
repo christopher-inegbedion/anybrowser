@@ -8,9 +8,17 @@ Pre-1.0, the interfaces in `core/engine.py`, `daemon/protocol.py` and
 `models/provider.py` may change in a minor release. Each such change gets an ADR
 and a `BREAKING:` entry here.
 
-## [Unreleased]
+## [0.1.0] - 2026-10-02
 
 ### Added
+
+- `DaemonTransport.probe()`, mirroring `BrowserEngine.probe()`: a transport
+  whose optional dependency is absent, or whose primitive the platform lacks,
+  now refuses rather than failing mid-test. The transport contract skips on a
+  refusal, so a fresh install no longer opens with eight red tests caused by an
+  extra the user simply had not installed. Defaults to a no-op, so existing
+  third-party transports are unaffected
+  ([ADR-0001](docs/adr/0001-capabilities-over-exceptions.md)).
 
 - `BrowserEngine`, the browser backend interface, with capability declaration
   rather than exception-driven discovery ([ADR-0001](docs/adr/0001-capabilities-over-exceptions.md)).
@@ -20,11 +28,12 @@ and a `BREAKING:` entry here.
 - OpenAI-compatible and Anthropic model providers with multimodal requests,
   real SSE streaming, and token-based cost reporting.
 - Entry-point registries for engines, transports and models.
-- `relaykit_conformance`, the executable engine contract — 32 tests, capability
-  gated, installed as a pytest plugin so third-party backends can run it in
-  their own repo with one command.
+- `relaykit_conformance`, the executable contracts — 32 engine tests, 10
+  transport, 6 model — capability gated and installed as a pytest plugin, so a
+  third-party backend runs them in its own repo with one command.
 - `PlaywrightEngine`, the reference backend. Passes conformance.
-- `ChromeEngine` over the DevTools WebSocket: 28 passed, 4 skipped. Launches
+- `ChromeEngine` over the DevTools WebSocket: 28 passed, 4 capability-gated
+  skips. Launches
   Chrome or attaches to a running one, and derives its declared
   `attach_to_user_session` from what the live pipe can actually reach.
 - `ChromeEngine`, a direct CDP backend with truthful action outcomes, DOM
@@ -32,9 +41,8 @@ and a `BREAKING:` entry here.
 - `SyncEngine`, a blocking facade owning exactly one event loop.
 - Three transports — `memory`, `unix`, `websocket` — each shipping a server and
   its matching client, and each passing the 10-test transport contract.
-- `relaykit.perception`: engine-agnostic DOM perception, with the deep-DOM
-  helpers (open and closed shadow roots, iframe coordinate mapping) ported from
-  Relay.
+- `relaykit.perception`: engine-agnostic DOM perception, including deep-DOM
+  helpers for open and closed shadow roots and iframe coordinate mapping.
 - `CdpConnection`, the seam between the Chrome engine and its pipe, so the
   DevTools WebSocket and extension-owned CDP share one engine.
 - `SafariBridge` and the Swift accessibility helper, with the host bundle

@@ -52,6 +52,25 @@ Ugly: nothing stops a backend from declaring a capability it does not have. The
 conformance suite catches it, which is why running the suite is the definition
 of a working backend rather than a nice-to-have.
 
+## Extended to transports (2026-10-02)
+
+The same distinction — *unavailable here* is not *broken* — applies to
+transports, and its absence was found the only way these things are found: by
+installing the wheel into a clean virtualenv and running the documented command.
+The websocket transport failed eight contract tests because the optional
+`websockets` package was not present. The error was accurate and even named the
+extra to install, but a failure says "this transport is broken", which it was
+not.
+
+`DaemonTransport.probe()` now mirrors `BrowserEngine.probe()` and the transport
+contract skips on a refusal. The default is a no-op, so a third-party transport
+that never thought about it behaves exactly as before.
+
+The general rule this fixes: **if an interface can be unavailable for reasons
+the author did not cause, it needs a probe, and the contract must distinguish
+the two.** Any future plugin interface should get one at birth rather than after
+a release candidate embarrasses it.
+
 ## When we would revisit
 
 If capability declarations start needing to be dynamic — a backend whose
