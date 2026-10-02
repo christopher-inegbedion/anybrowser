@@ -38,7 +38,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -78,6 +78,15 @@ __all__ = ["SUPPORTED_CAPABILITIES", "SafariEngine"]
 #: cross-origin frames are reachable only through the extension. Declaring them
 #: absent is what lets a planner route around them instead of discovering the
 #: gap mid-task -- see docs/architecture/capabilities.md.
+#:
+#: ``FILE_UPLOAD`` is absent for the same structural reason, and was declared
+#: here for a while with nothing behind it. A file input's ``files`` cannot be
+#: set from JavaScript, by design, and there is no counterpart to CDP's
+#: ``DOM.setFileInputFiles`` without a debugger protocol. The accessibility path
+#: can only open the system picker and drive it, which is a picker -- so
+#: "upload without a picker" is not something this engine can offer. A declared
+#: capability with no implementation is the one thing ADR-0001 is meant to
+#: prevent, and the conformance suite caught it.
 SUPPORTED_CAPABILITIES = Capabilities.of(
     Capability.ATTACH_TO_USER_SESSION,
     Capability.TRUSTED_INPUT,
@@ -85,7 +94,6 @@ SUPPORTED_CAPABILITIES = Capabilities.of(
     Capability.EVALUATE_JS,
     Capability.OFFSCREEN_SCREENSHOT,
     Capability.POINTER_GESTURES,
-    Capability.FILE_UPLOAD,
     Capability.JS_DIALOGS,
     Capability.COOKIES,
     Capability.TAB_MANAGEMENT,
@@ -94,6 +102,51 @@ SUPPORTED_CAPABILITIES = Capabilities.of(
     trusted_input="AXPress and AXValue; synthetic PointerEvents for gestures",
     offscreen_screenshot="ScreenCaptureKit; needs a Screen Recording grant",
 )
+
+
+#: macOS virtual key codes for the keys callers name rather than type. Sending
+#: these as text is the bug this table exists to prevent: AppleScript's
+#: ``keystroke "Enter"`` types the word, and the page never sees a Return.
+_KEY_CODES = {
+    "Enter": 36,
+    "Return": 36,
+    "Tab": 48,
+    "Space": 49,
+    "Delete": 51,
+    "Backspace": 51,
+    "Escape": 53,
+    "ArrowLeft": 123,
+    "ArrowRight": 124,
+    "ArrowDown": 125,
+    "ArrowUp": 126,
+    "Home": 115,
+    "End": 119,
+    "PageUp": 116,
+    "PageDown": 121,
+    "ForwardDelete": 117,
+    "F1": 122,
+    "F2": 120,
+    "F3": 99,
+    "F4": 118,
+    "F5": 96,
+    "F6": 97,
+    "F7": 98,
+    "F8": 100,
+    "F9": 101,
+    "F10": 109,
+    "F11": 103,
+    "F12": 111,
+}
+
+#: Web modifier names are not AppleScript's. "alt" and "meta" mean nothing to
+#: System Events, which wants "option" and "command"; a wrong name is a syntax
+#: error, so the modifier was silently dropped along with the whole keypress.
+_MODIFIERS = {
+    KeyModifier.ALT: "option",
+    KeyModifier.CONTROL: "control",
+    KeyModifier.META: "command",
+    KeyModifier.SHIFT: "shift",
+}
 
 
 class SafariEngine(BrowserEngine):
@@ -209,10 +262,22 @@ class SafariEngine(BrowserEngine):
         return self._bridge
 
     async def _read(self, op: str, **args: Any) -> Any:
+        """One page read, normalised across the two shapes the page can answer in.
+
+        Some ops answer with an object carrying ``value``; others answer with a
+        bare scalar -- ``signature`` returns a string, ``href`` likewise. Calling
+        ``.get`` on the scalar raised ``AttributeError``, and in
+        :meth:`_signature` that was swallowed, so every signature read returned
+        the empty string. Two empty strings compare equal, which made *every*
+        action report ``changed=False`` -- the exact failure ADR-0002 exists to
+        prevent, arriving through the machinery meant to prevent it.
+        """
         result = await self._require_channel().request(
             "read", {"tabId": self._tab_id, "op": op, "args": args}
         )
-        return result.get("value", result)
+        if isinstance(result, Mapping):
+            return result.get("value", result)
+        return result
 
     async def _signature(self) -> str:
         with contextlib.suppress(Exception):
@@ -357,7 +422,12 @@ class SafariEngine(BrowserEngine):
         point = await self._point_for(target)
         before = await self._signature()
         url = await self.url()
-        await self._require_bridge().press(window=self._window, x=point.x, y=point.y, url=url)
+        result = await self._require_bridge().press(
+            window=self._window, x=point.x, y=point.y, url=url
+        )
+        if not result.get("pressed", True):
+            # Dead space. Not an error, and emphatically not a success.
+            return ActionOutcome.no_change(result.get("reason") or "nothing to press there")
         return await self._settle(before, "clicked", "the click changed nothing")
 
     async def type_text(
@@ -392,11 +462,21 @@ class SafariEngine(BrowserEngine):
     async def press_key(
         self, key: str, *, modifiers: Sequence[KeyModifier] = (), repeat: int = 1
     ) -> ActionOutcome:
-        combo = " down, ".join(m.value for m in modifiers)
+        """Press one key, as a key rather than as its name.
+
+        ``keystroke "Enter"`` types the five characters E, n, t, e, r. Named
+        keys have to go through ``key code``, which is why :data:`_KEY_CODES`
+        exists; anything not in it is sent as text.
+        """
         before = await self._signature()
-        script = f'tell application "System Events" to keystroke {json.dumps(key)}'
-        if combo:
-            script += f" using {{{combo} down}}"
+        if key in _KEY_CODES:
+            action = f"key code {_KEY_CODES[key]}"
+        else:
+            action = f"keystroke {json.dumps(key)}"
+        modifier_names = [_MODIFIERS[m] for m in modifiers if m in _MODIFIERS]
+        if modifier_names:
+            action += " using {" + ", ".join(f"{name} down" for name in modifier_names) + "}"
+        script = f'tell application "System Events" to {action}'
         for _ in range(max(1, repeat)):
             await self._require_bridge().applescript(script)
         return await self._settle(before, f"pressed {key}", f"{key} changed nothing")
@@ -464,11 +544,21 @@ class SafariEngine(BrowserEngine):
         self, target: Element, *, value: str = "", label: str = "", index: int = -1
     ) -> ActionOutcome:
         _, node = decode_handle(target.handle)
-        result = await self._read("select", index=node, value=value, label=label, optionIndex=index)
-        if not result or not result.get("ok"):
-            return ActionOutcome.failure(
-                "no matching option", available=(result or {}).get("available", [])
-            )
+        # Deliberately not through _read: that unwraps a mapping to its "value"
+        # field, and this op answers with an object that *carries* "value"
+        # alongside "ok" and "available", so unwrapping hands back a bare string
+        # and the check below reads `.get` on it.
+        result = await self._require_channel().request(
+            "read",
+            {
+                "tabId": self._tab_id,
+                "op": "select",
+                "args": {"index": node, "value": value, "label": label, "optionIndex": index},
+            },
+        )
+        if not isinstance(result, Mapping) or not result.get("ok"):
+            available = result.get("available", []) if isinstance(result, Mapping) else []
+            return ActionOutcome.failure("no matching option", available=available)
         return ActionOutcome(ok=True, changed=True, detail=f"selected {result['value']}")
 
     # ------------------------------------------------------------------ #

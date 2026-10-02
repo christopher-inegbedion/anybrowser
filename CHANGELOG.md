@@ -12,6 +12,42 @@ and a `BREAKING:` entry here.
 
 ### Fixed
 
+- Safari: **`AXManualAccessibility` was never set**, so WebKit handed out an
+  accessibility tree that could be read but not acted on. Roles, titles and
+  frames resolved, `AXPress` appeared in the element's actions, performing it
+  returned `.success` — and the page saw nothing. Every observable signal said
+  the click had worked. This is the opt-in every assistive client uses to get a
+  live tree out of a WebKit app; clicks now carry real user activation
+  (`isTrusted=true`).
+- Safari: `press_key("Enter")` ran `keystroke "Enter"`, which types the five
+  characters E, n, t, e, r. Named keys now go through `key code`. Modifiers were
+  broken the same way — `alt` and `meta` mean nothing to System Events, which
+  wants `option` and `command`, and a wrong name is a syntax error that took the
+  whole keypress with it.
+- Safari: a click on dead space raised instead of reporting `changed=False`. The
+  helper now answers `pressed: false` with a reason, because "there was nothing
+  to press" is an outcome and an exception gives the caller nothing to report. A
+  press that is attempted and fails still raises.
+- Safari: `_read` assumed every page reply was a mapping and called `.get` on
+  it, which raised on the ops that answer with a scalar. In `_signature` that
+  was swallowed, so every signature read returned `""`, two empty strings
+  compared equal, and **every action reported `changed=False`** — the exact
+  failure ADR-0002 exists to prevent, arriving through the machinery meant to
+  prevent it.
+- Safari: `select_option` went through that same unwrapping, which strips a
+  mapping to its `value` field — and this op answers with an object that
+  *carries* `value` next to `ok`, so the check read `.get` on a bare string.
+
+### Changed
+
+- Safari no longer declares `FILE_UPLOAD`. It was declared with no
+  implementation behind it: a file input's `files` cannot be set from
+  JavaScript, and without a debugger protocol there is no counterpart to
+  `DOM.setFileInputFiles`. A declared capability with nothing behind it is the
+  one thing [ADR-0001](docs/adr/0001-capabilities-over-exceptions.md) exists to
+  prevent, and the conformance suite caught it.
+
+
 - Safari: the extension channel coerced every reply's `result` to a mapping,
   but some commands answer with a scalar -- `read` with `op="href"` returns the
   URL as a bare string, and `dict("https://...")` raises. This failed 8 of the

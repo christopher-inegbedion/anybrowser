@@ -107,7 +107,7 @@ Full walkthrough: [**Writing an engine**](docs/guides/writing-an-engine.md).
 | `chrome` (DevTools) | no — needs the launch flag | yes | **28 passed, 4 skipped** | yes |
 | `chrome` (extension) | **yes** — your own windows | yes | **28 passed, 4 skipped** (2026-10-02, Chrome 154) | no — needs a browser with the extension loaded |
 | `playwright` | no — own profile | yes | **28 passed, 4 skipped** | yes, the reference engine |
-| `safari` | yes — accessibility + extension | partly — see below | **21 passed, 5 failed, 6 skipped** (2026-10-02, Safari 26.5, macOS 26.5) | only that it refuses cleanly off-setup |
+| `safari` | yes — accessibility + extension | yes | **25 passed, 7 skipped** (2026-10-02, Safari 26.5, macOS 26.5) | only that it refuses cleanly off-setup |
 
 The engine contract is 32 tests. The 4 skips are the capability gate working as
 intended: those tests assert the *error* an engine raises for something it does
@@ -134,11 +134,16 @@ afternoon if nobody tells you.
 
 Safari is implemented in both halves — a Swift helper for trusted background
 input and occlusion-proof capture, and a Web Extension for the DOM and pointer
-gestures — and it is **not yet at parity**. Perception, navigation, geometry and
-capture pass; five input tests fail, all on the native accessibility path
-(clicking an element, reporting a click on nothing, `press_key`, `select_option`,
-`upload`). The figure above is a real run, dated, on a real machine rather than
-a claim: reproduce it with [driving Safari](docs/guides/safari-extension.md).
+gestures — and it passes the contract, three runs in a row. Clicks carry real
+user activation (`isTrusted=true`), which is the whole reason the native half
+exists. Seven tests stand down: `file_upload`, `full_page_screenshot` and
+`cross_origin_frames` are honestly undeclared, and four are the capability gate.
+
+Uploads are the notable absence. A file input's `files` cannot be set from
+JavaScript, by design, and without a debugger protocol there is no counterpart
+to CDP's `DOM.setFileInputFiles`. The accessibility path can only open the
+system picker and drive it, which is a picker — so this engine says it cannot,
+rather than appearing to and failing on a real form.
 
 Two things that setup cannot be done without, and neither is optional:
 
