@@ -220,7 +220,31 @@ def install(app: Path, dest: Path = Path("/Applications")) -> Path:
     else:
         subprocess.run(["cp", "-R", str(app), str(target)], check=True, capture_output=True)
         print(f"installed: {target}")
+    _unregister(app)
     return target
+
+
+def _unregister(app: Path) -> None:
+    """Take the build output out of the system's extension registry.
+
+    A built app is a complete app bundle, so macOS registers the extension
+    inside it exactly as it registers the installed copy. Both then provide the
+    same extension, and Safari lists it twice with no way to tell them apart --
+    which is what the duplicate everyone chases actually is. It is not a ghost
+    of a previous install; it is the build directory.
+
+    Unregistering the source is enough, and is preferred over deleting the build
+    output: the build stays available for inspection, and only the registration
+    that confuses Safari goes away. ``pluginkit -r`` on a path that was never
+    registered is a no-op.
+    """
+    appex = app / "Contents" / "PlugIns" / f"{app.stem} Extension.appex"
+    if not appex.exists():
+        return
+    subprocess.run(["pluginkit", "-r", str(appex)], check=False, capture_output=True)
+    print(
+        f"unregistered the build copy, so Safari lists one extension: {appex.parent.parent.parent.name}"
+    )
 
 
 def _nest_bundle_ids(project: Path, bundle_id: str) -> None:
