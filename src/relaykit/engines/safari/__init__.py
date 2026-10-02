@@ -1,8 +1,11 @@
 """Safari engine: accessibility for input, a Web Extension for perception.
 
-Mid-port. ``probe()`` refuses cleanly until the extension half exists, so the
-registry falls through to another engine rather than failing mid-run. The native
-half -- the Swift accessibility helper -- is ported and usable on its own via
+Both halves are implemented: the Swift accessibility helper for trusted
+background input and occlusion-proof capture, and the Web Extension for the DOM
+and pointer gestures. Each needs a local build and a one-time Accessibility
+grant, so ``probe()`` refuses cleanly when the helper is unbuilt or the platform
+is not macOS -- the registry then falls through to another engine rather than
+failing mid-run. The native half is usable on its own via
 :class:`~relaykit.engines.safari.bridge.SafariBridge`.
 """
 

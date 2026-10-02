@@ -1,6 +1,6 @@
 # Porting: the Chrome engine
 
-**Tracking:** [#3](https://github.com/christopher-inegbedion/relaykit/issues/3) · **Status:** `devtools` pipe done (28 passed, 4 skipped); `extension` pipe outstanding
+**Status:** both pipes done. `devtools` passes the engine contract 29/29 and is gated by CI; `extension` passes it on a local run and cannot be gated by CI, since it needs a browser with the extension loaded. See [driving your own Chrome](../guides/chrome-extension.md).
 
 ## What it is
 
