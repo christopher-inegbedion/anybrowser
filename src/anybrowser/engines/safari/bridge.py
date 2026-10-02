@@ -177,11 +177,20 @@ class SafariBridge:
 
         Resolves the *actionable* element, not the deepest one: the deepest node
         under a point is usually an inner span that cannot be pressed, so the
-        helper walks up to the nearest ancestor that can be and fails loudly
-        when there is none, rather than reporting a press that did nothing.
+        helper walks up to the nearest pressable ancestor.
+
+        Returns ``{"pressed": bool, "element": {...}, "reason": str}``. Finding
+        nothing pressable is reported, not raised: a click on dead space has to
+        come back as ``changed=False`` rather than as an exception, which is
+        what the contract checks and what keeps an agent from looping. A press
+        that was attempted and *failed* still raises.
         """
         reply = await self.call("press", window=window, x=x, y=y, url=url)
-        return dict(reply.get("element") or {})
+        return {
+            "pressed": bool(reply.get("pressed", True)),
+            "element": dict(reply.get("element") or {}),
+            "reason": str(reply.get("reason") or ""),
+        }
 
     async def fill(
         self,

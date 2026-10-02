@@ -82,10 +82,43 @@ func axFrame(_ e: AXUIElement) -> CGRect? {
 }
 func axChildren(_ e: AXUIElement) -> [AXUIElement] { axAttr(e, "AXChildren") as? [AXUIElement] ?? [] }
 
+/// PIDs already opted into WebKit's full accessibility tree, so the attribute
+/// is set once per Safari process rather than on every call.
+private var manualAccessibilityEnabled = Set<pid_t>()
+
 func safariApp() -> (NSRunningApplication, AXUIElement)? {
     guard let app = NSWorkspace.shared.runningApplications
         .first(where: { $0.bundleIdentifier == "com.apple.Safari" }) else { return nil }
-    return (app, AXUIElementCreateApplication(app.processIdentifier))
+    let el = AXUIElementCreateApplication(app.processIdentifier)
+    enableManualAccessibility(app.processIdentifier, el)
+    return (app, el)
+}
+
+/// Ask WebKit to turn accessibility on in its web content processes.
+///
+/// Without this a client gets a tree it can *read* and cannot *act* on. Roles,
+/// titles and frames all resolve, `AXPress` is listed among the element's
+/// actions, and performing it returns `.success` -- while the page sees nothing
+/// at all. That combination is why this was so hard to see: every observable
+/// signal said the click had worked.
+///
+/// WebKit gates the live tree behind `AXManualAccessibility` on the application
+/// element, set by the client that wants it. Non-standard, undocumented in the
+/// Accessibility headers, and load-bearing: it is how VoiceOver and every other
+/// assistive client gets a working tree out of a WebKit app.
+func enableManualAccessibility(_ pid: pid_t, _ appEl: AXUIElement) {
+    if manualAccessibilityEnabled.contains(pid) { return }
+    // Ignore the result: older systems answer with an error for an attribute
+    // they do not know, and there is nothing useful to do about it here.
+    _ = AXUIElementSetAttributeValue(
+        appEl, "AXManualAccessibility" as CFString, kCFBooleanTrue
+    )
+    _ = AXUIElementSetAttributeValue(
+        appEl, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue
+    )
+    manualAccessibilityEnabled.insert(pid)
+    // WebKit brings the web process's tree up asynchronously.
+    usleep(150_000)
 }
 
 func findRole(_ e: AXUIElement, _ role: String, _ depth: Int = 0) -> AXUIElement? {
@@ -616,12 +649,19 @@ func handle(_ msg: [String: Any]) {
         case "press":
             let r = try resolve(match: match, x: msg["x"] as? Double ?? 0, y: msg["y"] as? Double ?? 0, url: (msg["url"] as? String) ?? "",
                                 scrollX: msg["scrollX"] as? Double ?? 0, scrollY: msg["scrollY"] as? Double ?? 0)
+            // Nothing to press is an outcome, not a failure. A click on dead
+            // space is the single most important honesty case in the contract:
+            // the caller has to be able to report changed=false, and an
+            // exception gives it nothing to report. A press that was *attempted
+            // and failed* still throws.
             guard let target = actionable(r.el, for: "press") else {
-                throw Err("nothing pressable at that point (deepest was \(axStr(r.el, "AXRole") ?? "?"))")
+                out.ok(id, ["window": r.title, "pressed": false,
+                            "reason": "nothing pressable at that point (deepest was \(axStr(r.el, "AXRole") ?? "?"))"])
+                break
             }
             let e = AXUIElementPerformAction(target, kAXPressAction as CFString)
             if e != .success { throw Err("AXPress failed (\(e.rawValue))") }
-            out.ok(id, ["window": r.title, "element": describe(target)])
+            out.ok(id, ["window": r.title, "pressed": true, "element": describe(target)])
 
         case "fill":
             // AXValue on web content is NOT reliably honoured without focus: it
