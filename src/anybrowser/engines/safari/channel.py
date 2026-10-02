@@ -130,7 +130,17 @@ class SafariExtensionChannel:
 
     async def request(
         self, kind: str, payload: dict[str, Any] | None = None, *, timeout: float = 20.0
-    ) -> dict[str, Any]:
+    ) -> Any:
+        """Send one command and return its ``result`` exactly as the extension sent it.
+
+        Deliberately not coerced to a mapping. Most commands answer with an
+        object, but some answer with a scalar -- ``read`` with ``op="href"``
+        returns the URL as a bare string -- and ``dict("https://...")`` raises
+        ``ValueError: dictionary update sequence element #0 has length 1``. The
+        callers already expect the raw shape: ``url()`` does
+        ``str(await request(...) or "")``, which a coerced dict would have
+        answered with the string of a dict even if it had not raised.
+        """
         if self._socket is None:
             raise TransportError("no Safari extension is connected")
         message_id = str(next(self._ids))
@@ -150,4 +160,4 @@ class SafariExtensionChannel:
 
         if not reply.get("ok"):
             raise EngineError(str(reply.get("error") or f"{kind} failed"))
-        return dict(reply.get("result") or {})
+        return reply.get("result")

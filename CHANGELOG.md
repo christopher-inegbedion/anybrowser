@@ -10,6 +10,23 @@ and a `BREAKING:` entry here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Safari: the extension channel coerced every reply's `result` to a mapping,
+  but some commands answer with a scalar -- `read` with `op="href"` returns the
+  URL as a bare string, and `dict("https://...")` raises. This failed 8 of the
+  32 contract tests on its own; the callers already expected the raw shape.
+- Safari: the helper's stdio reader used asyncio's default 64KiB line limit, so
+  every screenshot failed with `LimitOverrunError`. A capture arrives as base64
+  on one line and is megabytes.
+- The Safari extension build gave its embedded extension the *host app's* bundle
+  identifier, because `PRODUCT_BUNDLE_IDENTIFIER` passed to `xcodebuild` applies
+  to every target. Xcode accepts it -- a string is a prefix of itself -- and
+  `pluginkit` then registers the extension under the app's identity. The app's
+  identifier is now rewritten in the generated project instead.
+- The Safari extension build wrote into Xcode's shared DerivedData and printed
+  no path. It now builds into the output directory and prints where the app is.
+
 ### Added
 
 - `anybrowser run --model-option KEY=VALUE`, repeatable, passed to the model

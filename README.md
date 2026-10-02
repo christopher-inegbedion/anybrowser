@@ -105,9 +105,9 @@ Full walkthrough: [**Writing an engine**](docs/guides/writing-an-engine.md).
 | Engine | Attaches to your session | Trusted input | Engine contract | Gated by CI |
 |---|---|---|---|---|
 | `chrome` (DevTools) | no — needs the launch flag | yes | **28 passed, 4 skipped** | yes |
-| `chrome` (extension) | **yes** — your own windows | yes | **passes** (local run) | no — needs a browser with the extension loaded |
+| `chrome` (extension) | **yes** — your own windows | yes | **28 passed, 4 skipped** (2026-10-02, Chrome 154) | no — needs a browser with the extension loaded |
 | `playwright` | no — own profile | yes | **28 passed, 4 skipped** | yes, the reference engine |
-| `safari` | yes — accessibility + extension | yes | needs a local setup ([guide](docs/guides/safari-extension.md)) | only that it refuses cleanly off-setup |
+| `safari` | yes — accessibility + extension | partly — see below | **21 passed, 5 failed, 6 skipped** (2026-10-02, Safari 26.5, macOS 26.5) | only that it refuses cleanly off-setup |
 
 The engine contract is 32 tests. The 4 skips are the capability gate working as
 intended: those tests assert the *error* an engine raises for something it does
@@ -132,11 +132,26 @@ open, see [driving your own Chrome](docs/guides/chrome-extension.md) — note th
 `--load-extension` is silently ignored by Chrome stable, which is a memorable
 afternoon if nobody tells you.
 
-Safari is implemented in both halves: a Swift helper for trusted background
+Safari is implemented in both halves — a Swift helper for trusted background
 input and occlusion-proof capture, and a Web Extension for the DOM and pointer
-gestures. It needs a local build and a one-time Accessibility grant, so it skips
-rather than fails where that has not been done — see
-[driving Safari](docs/guides/safari-extension.md).
+gestures — and it is **not yet at parity**. Perception, navigation, geometry and
+capture pass; five input tests fail, all on the native accessibility path
+(clicking an element, reporting a click on nothing, `press_key`, `select_option`,
+`upload`). The figure above is a real run, dated, on a real machine rather than
+a claim: reproduce it with [driving Safari](docs/guides/safari-extension.md).
+
+Two things that setup cannot be done without, and neither is optional:
+
+- **The containing app must be signed with a real identity.** An ad-hoc
+  signature (`CODE_SIGN_IDENTITY=-`) makes the extension invisible to Safari —
+  it never appears in Settings ▸ Extensions, nothing is logged, and "Allow
+  unsigned extensions" does not cover it. Sign with an Apple Development
+  identity and install the app under `/Applications`.
+- **Safari loads extension background content lazily.** The bridge dials the
+  engine when its background page loads, and Safari does not load it just
+  because the extension is enabled, so the engine waits and then refuses. Until
+  that is fixed, wake it from Develop ▸ Web Extension Background Content before
+  a run; it shows as "(not loaded)" when asleep.
 
 ---
 

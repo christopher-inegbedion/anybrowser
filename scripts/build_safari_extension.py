@@ -14,6 +14,7 @@ no second copy to drift.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -85,7 +86,9 @@ def convert(
     from the app name, while taking the *extension's* from
     ``--bundle-identifier``. Left alone the two do not nest, and Xcode refuses
     with "Embedded binary's bundle identifier is not prefixed with the parent
-    app's". So the app id is overridden at build time to match.
+    app's". So the app's identifier is rewritten in the generated project --
+    see :func:`_nest_bundle_ids` for why it cannot be an ``xcodebuild``
+    argument.
 
     Safari also rejects ``"persistent": true`` as an unknown manifest key. The
     background *page* is the part that matters -- Safari terminates a Manifest
@@ -115,6 +118,8 @@ def convert(
     if not build_app:
         return 0
     project = out_dir / app_name / f"{app_name}.xcodeproj"
+    _nest_bundle_ids(project, bundle_id)
+    derived = out_dir / "DerivedData"
     subprocess.run(
         [
             "xcodebuild",
@@ -124,17 +129,48 @@ def convert(
             app_name,
             "-configuration",
             "Release",
+            "-derivedDataPath",
+            str(derived),
             "CODE_SIGN_IDENTITY=-",
             "CODE_SIGN_STYLE=Manual",
             "DEVELOPMENT_TEAM=",
-            f"PRODUCT_BUNDLE_IDENTIFIER={bundle_id}",
             "build",
         ],
         check=True,
         capture_output=True,
     )
-    print(f"built {app_name}.app -- open it once, then enable it in Safari settings")
+    app = derived / "Build" / "Products" / "Release" / f"{app_name}.app"
+    print(f"built {app}")
+    print("open it once, then enable the extension in Safari ▸ Settings ▸ Extensions")
     return 0
+
+
+def _nest_bundle_ids(project: Path, bundle_id: str) -> None:
+    """Make the app's identifier the prefix of its extension's, in the project.
+
+    This has to be edited into the project rather than passed to ``xcodebuild``.
+    A build setting given on the command line applies to *every* target, so
+    ``PRODUCT_BUNDLE_IDENTIFIER=<app id>`` silently rewrites the extension's
+    identifier too, and the app ships with an embedded extension carrying its
+    host's identifier. Xcode allows it -- a string is a prefix of itself -- so
+    the error surfaces later, in Safari, as an extension that does not register.
+
+    The converter leaves them unnestable: the app's identifier is derived from
+    the app *name*, while the extension's comes from ``--bundle-identifier``.
+    """
+    pbxproj = project / "project.pbxproj"
+    text = pbxproj.read_text()
+    extension_id = f"{bundle_id}.Extension"
+    pattern = re.compile(r"PRODUCT_BUNDLE_IDENTIFIER = (\"[^\"]+\"|[^;]+);")
+
+    def fix(match: re.Match[str]) -> str:
+        current = match.group(1).strip('"')
+        # Leave the extension alone; retarget only the app.
+        if current == extension_id:
+            return match.group(0)
+        return f"PRODUCT_BUNDLE_IDENTIFIER = {bundle_id};"
+
+    pbxproj.write_text(pattern.sub(fix, text))
 
 
 if __name__ == "__main__":
