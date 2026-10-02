@@ -34,9 +34,18 @@ def test_info_identifies_the_browser(engine, run):
     assert info.browser, "info().browser must name the browser being driven"
 
 
-def test_start_is_idempotent(engine, run):
+def test_start_is_idempotent(engine, run, base_url):
+    """Starting twice is safe, and the engine can report where it is.
+
+    The navigation is load-bearing, not scene-setting. An engine that attaches
+    to a browser someone is already using may start on a page it cannot read --
+    a freshly launched Safari shows its Start Page, which is browser chrome, and
+    no content script runs there or on `about:blank`. Asserting a URL before
+    establishing a page tests the environment rather than the engine.
+    """
     run(engine.start())
     run(engine.start())
+    run(engine.navigate(f"{base_url}/index.html"))
     assert run(engine.url()) is not None
 
 
