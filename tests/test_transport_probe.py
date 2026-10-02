@@ -12,10 +12,10 @@ import sys
 
 import pytest
 
-from relaykit.core.errors import TransportError
-from relaykit.daemon.transports.memory import MemoryTransport
-from relaykit.daemon.transports.unix import UnixSocketTransport
-from relaykit.daemon.transports.websocket import WebSocketTransport
+from anybrowser.core.errors import TransportError
+from anybrowser.daemon.transports.memory import MemoryTransport
+from anybrowser.daemon.transports.unix import UnixSocketTransport
+from anybrowser.daemon.transports.websocket import WebSocketTransport
 
 
 async def test_a_transport_with_nothing_to_check_is_available():
@@ -29,7 +29,7 @@ async def test_websocket_refuses_without_its_extra(monkeypatch):
     with pytest.raises(TransportError) as excinfo:
         await WebSocketTransport.probe()
     # The message has to name the extra, or the skip it produces is a dead end.
-    assert "relaykit[daemon]" in str(excinfo.value)
+    assert "anybrowser[daemon]" in str(excinfo.value)
 
 
 async def test_websocket_is_available_when_the_extra_is_there():

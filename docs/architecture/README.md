@@ -1,6 +1,6 @@
 # Architecture
 
-RelayKit is four layers, each written against the interface below it and nothing
+AnyBrowser is four layers, each written against the interface below it and nothing
 else. That is the whole design; everything else follows from it.
 
 ```
@@ -28,10 +28,10 @@ Imports no backend, no driver, no HTTP library. If `core` ever needs to import
 `websockets` or `playwright`, an abstraction has failed and the fix is upstream
 of that import.
 
-- [`engine.py`](../../src/relaykit/core/engine.py) — `BrowserEngine`, the contract.
-- [`types.py`](../../src/relaykit/core/types.py) — `Snapshot`, `Element`, `Point`, `ActionOutcome`.
-- [`errors.py`](../../src/relaykit/core/errors.py) — what every backend translates its failures into.
-- [`registry.py`](../../src/relaykit/core/registry.py) — entry-point plugin discovery.
+- [`engine.py`](../../src/anybrowser/core/engine.py) — `BrowserEngine`, the contract.
+- [`types.py`](../../src/anybrowser/core/types.py) — `Snapshot`, `Element`, `Point`, `ActionOutcome`.
+- [`errors.py`](../../src/anybrowser/core/errors.py) — what every backend translates its failures into.
+- [`registry.py`](../../src/anybrowser/core/registry.py) — entry-point plugin discovery.
 
 ### `engines/` — making a browser do things
 
@@ -64,7 +64,7 @@ The browser is a singleton and several things want it: the CLI, a UI, a
 scheduled run. The daemon owns one engine and serves them, handling tab
 ownership, event fan-out and authentication.
 
-It knows nothing about sockets. [`DaemonTransport`](../../src/relaykit/daemon/transport.py)
+It knows nothing about sockets. [`DaemonTransport`](../../src/anybrowser/daemon/transport.py)
 is the seam, and the shipped transports are WebSocket, Unix socket, and an
 in-process one used by tests.
 
@@ -78,10 +78,10 @@ kind of agent this is; the tools, engines and daemon underneath do not move.
 
 If you're new, read in this order — each one only needs the one before it:
 
-1. [`core/types.py`](../../src/relaykit/core/types.py) — the vocabulary
-2. [`core/engine.py`](../../src/relaykit/core/engine.py) — the contract
-3. [`engines/playwright/engine.py`](../../src/relaykit/engines/playwright/engine.py) — the contract, satisfied
-4. [`conformance/relaykit_conformance/test_contract.py`](../../conformance/relaykit_conformance/test_contract.py) — the contract, enforced
+1. [`core/types.py`](../../src/anybrowser/core/types.py) — the vocabulary
+2. [`core/engine.py`](../../src/anybrowser/core/engine.py) — the contract
+3. [`engines/playwright/engine.py`](../../src/anybrowser/engines/playwright/engine.py) — the contract, satisfied
+4. [`conformance/anybrowser_conformance/test_contract.py`](../../conformance/anybrowser_conformance/test_contract.py) — the contract, enforced
 
 ## The two ideas worth arguing about
 

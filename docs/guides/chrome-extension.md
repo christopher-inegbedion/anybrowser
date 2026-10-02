@@ -76,7 +76,7 @@ against ~2s direct.
 
 **Replies are occasionally lost.** Chrome terminates a Manifest V3 service worker
 whenever it likes, most visibly when a navigation tears down the execution
-context under an in-flight `Runtime.evaluate`. RelayKit's own page reads are
+context under an in-flight `Runtime.evaluate`. AnyBrowser's own page reads are
 bounded and retried once, so this shows up as a brief pause rather than a
 failure. Your own `evaluate()` calls are *not* retried — they may have side
 effects, and running those twice is worse than surfacing an error.
@@ -96,7 +96,7 @@ not. That is derived from the live connection rather than stated separately, so
 the two cannot disagree:
 
 ```python
-from relaykit.core import Capability
+from anybrowser.core import Capability
 
 if Capability.ATTACH_TO_USER_SESSION in engine.capabilities:
     ...  # these are the user's real tabs

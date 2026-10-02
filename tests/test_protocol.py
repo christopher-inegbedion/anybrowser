@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from relaykit.core.errors import ProtocolError
-from relaykit.daemon.protocol import Event, Request, Response, decode, encode
+from anybrowser.core.errors import ProtocolError
+from anybrowser.daemon.protocol import Event, Request, Response, decode, encode
 
 
 def test_request_round_trips():

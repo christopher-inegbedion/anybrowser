@@ -16,7 +16,7 @@ import importlib
 import sys
 from importlib.metadata import entry_points
 
-GROUPS = ("relaykit.engines", "relaykit.transports", "relaykit.models", "console_scripts")
+GROUPS = ("anybrowser.engines", "anybrowser.transports", "anybrowser.models", "console_scripts")
 
 
 def main() -> int:
@@ -26,7 +26,7 @@ def main() -> int:
     for group in GROUPS:
         for ep in entry_points(group=group):
             # console_scripts is a shared namespace; only ours is our problem.
-            if group == "console_scripts" and not ep.value.startswith("relaykit"):
+            if group == "console_scripts" and not ep.value.startswith("anybrowser"):
                 continue
             checked += 1
             module, _, attr = ep.value.partition(":")

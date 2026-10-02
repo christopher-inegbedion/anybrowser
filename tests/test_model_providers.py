@@ -13,9 +13,9 @@ import base64
 
 import pytest
 
-from relaykit.core.errors import ModelError
-from relaykit.models import AnthropicProvider, OpenAICompatibleProvider
-from relaykit.models.provider import ImagePart, Message, Role
+from anybrowser.core.errors import ModelError
+from anybrowser.models import AnthropicProvider, OpenAICompatibleProvider
+from anybrowser.models.provider import ImagePart, Message, Role
 
 _PIXEL = b"\x89PNG\r\n\x1a\n fake"
 
@@ -198,7 +198,7 @@ def test_openai_price_tables_stay_in_step():
     The fallback is safe rather than fatal, but a silent overcharge is still
     wrong; this fails when someone adds a model to one table only.
     """
-    from relaykit.models.openai_compatible import (
+    from anybrowser.models.openai_compatible import (
         _OPENAI_CACHED_INPUT_PRICES,
         OPENAI_PRICES,
     )

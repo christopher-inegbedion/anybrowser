@@ -54,7 +54,7 @@ jobs:
       - run: uv python install ${{ matrix.python }}
       - run: uv venv --python ${{ matrix.python }}
       - run: uv pip install -e ".[dev]"
-      - run: uv run pytest --cov=relaykit --cov-report=xml -q
+      - run: uv run pytest --cov=anybrowser --cov-report=xml -q
 
   conformance:
     name: conformance (${{ matrix.engine }})
@@ -87,7 +87,7 @@ jobs:
       # always have one where it looks.
       - uses: browser-actions/setup-chrome@v1
         if: matrix.engine == 'chrome'
-      - run: uv run pytest --pyargs relaykit_conformance --engine ${{ matrix.engine }} -q -rs
+      - run: uv run pytest --pyargs anybrowser_conformance --engine ${{ matrix.engine }} -q -rs
 
   transports:
     name: conformance (transport ${{ matrix.transport }})
@@ -102,7 +102,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv venv && uv pip install -e ".[dev]"
-      - run: uv run pytest --pyargs relaykit_conformance --transport ${{ matrix.transport }} -q -rs
+      - run: uv run pytest --pyargs anybrowser_conformance --transport ${{ matrix.transport }} -q -rs
 
   safari-extension:
     name: safari extension assembles
@@ -138,7 +138,7 @@ jobs:
       # end. The daemon needs no contract of its own; its job is to be
       # indistinguishable from what it serves, which is what this measures.
       - run: >
-          uv run pytest --pyargs relaykit_conformance --engine playwright
+          uv run pytest --pyargs anybrowser_conformance --engine playwright
           --via-daemon --daemon-transport ${{ matrix.transport }} -q -rs
 
   build:
@@ -150,7 +150,7 @@ jobs:
       - run: uv build
       # A green source tree with a broken wheel is the failure mode this catches,
       # and it has caught two already: assets read from disk at runtime that the
-      # package data omitted, and `relaykit.engines` the subpackage shadowing the
+      # package data omitted, and `anybrowser.engines` the subpackage shadowing the
       # registry of the same name -- which survived in a checkout on import-order
       # luck and broke the moment it was installed. Exercise the wheel in a clean
       # environment, never in the checkout.
@@ -160,14 +160,14 @@ jobs:
           VIRTUAL_ENV=/tmp/wheeltest uv pip install dist/*.whl
           cd /tmp
           /tmp/wheeltest/bin/python -c "
-          import relaykit
-          from relaykit.perception import COLLECT_SCRIPT, READ_SCRIPT
-          from relaykit.engines.safari.build import _SOURCE, _PLIST
+          import anybrowser
+          from anybrowser.perception import COLLECT_SCRIPT, READ_SCRIPT
+          from anybrowser.engines.safari.build import _SOURCE, _PLIST
           from importlib.resources import files
-          assert relaykit.available_engines(), 'no engines discoverable'
+          assert anybrowser.available_engines(), 'no engines discoverable'
           assert 'deepDom' in COLLECT_SCRIPT, 'deep-DOM helpers not inlined'
-          assert '__RELAYKIT_DEEP_DOM_HELPERS__' not in COLLECT_SCRIPT
+          assert '__ANYBROWSER_DEEP_DOM_HELPERS__' not in COLLECT_SCRIPT
           assert _SOURCE.exists() and _PLIST.exists(), 'Swift helper missing'
-          assert (files('relaykit_conformance')/'pages'/'index.html').is_file()
-          print('wheel ok:', relaykit.__version__, relaykit.available_engines())
+          assert (files('anybrowser_conformance')/'pages'/'index.html').is_file()
+          print('wheel ok:', anybrowser.__version__, anybrowser.available_engines())
           "

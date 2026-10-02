@@ -27,5 +27,5 @@ body:
     id: version
     attributes:
       label: Version
-      placeholder: "relaykit 0.1.0, Python 3.12, macOS 26.5"
+      placeholder: "anybrowser 0.1.0, Python 3.12, macOS 26.5"
     validations: { required: true }

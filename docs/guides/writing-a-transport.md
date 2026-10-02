@@ -6,7 +6,7 @@ imports a socket library — it is handed connections and messages.
 Implement two methods:
 
 ```python
-from relaykit.daemon.transport import DaemonTransport, Connection, MessageHandler
+from anybrowser.daemon.transport import DaemonTransport, Connection, MessageHandler
 
 
 class GrpcTransport(DaemonTransport):
@@ -20,7 +20,7 @@ class GrpcTransport(DaemonTransport):
 ```
 
 ```toml
-[project.entry-points."relaykit.transports"]
+[project.entry-points."anybrowser.transports"]
 grpc = "my_package.transport:GrpcTransport"
 ```
 
@@ -31,7 +31,7 @@ exactly one response. Events carry no `id` and are never acknowledged. Do not
 invent a third shape.
 
 **Frame it yourself.** The protocol is JSON objects with no embedded newlines
-([`protocol.py`](../../src/relaykit/daemon/protocol.py)). How they are delimited
+([`protocol.py`](../../src/anybrowser/daemon/protocol.py)). How they are delimited
 is the transport's business — WebSocket messages, newline-delimited on a stream,
 length-prefixed. Decode with `protocol.decode`, which raises `ProtocolError`
 rather than handing the server a half-understood message.
@@ -53,7 +53,7 @@ browser holding the user's live sessions. A transport that defaults to
 Point the conformance suite at yours:
 
 ```bash
-pytest --pyargs relaykit_conformance --transport grpc
+pytest --pyargs anybrowser_conformance --transport grpc
 ```
 
 The package holds both contracts; naming `--transport` runs the transport one

@@ -74,7 +74,7 @@ absent is what lets a planner route around them
 ## Definition of done
 
 ```bash
-pytest --pyargs relaykit_conformance --engine safari
+pytest --pyargs anybrowser_conformance --engine safari
 ```
 
 green on macOS, with the capability-gated tests skipping for the four above,

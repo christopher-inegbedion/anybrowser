@@ -4,13 +4,13 @@
 
 ## What it is
 
-One engine, two pipes ([`cdp.py`](../../src/relaykit/engines/chrome/cdp.py)).
+One engine, two pipes ([`cdp.py`](../../src/anybrowser/engines/chrome/cdp.py)).
 
 `devtools` — **done** — is a direct WebSocket to a browser started with
 `--remote-debugging-port`. Standard, dependency-light, and the only mode that
 can run in CI, because it can launch its own browser.
 
-`extension` — **outstanding** — relays CDP through a browser extension holding a
+`extension` — **done** — relays CDP through a browser extension holding a
 `chrome.debugger` session. That is the whole reason this engine exists: it
 attaches to the browser the user already has open, with their tabs and their
 logins, which no launcher-based automation can do.
@@ -26,7 +26,7 @@ engine  ──JSON over WS──▶  daemon  ──chrome.debugger──▶  ext
 
 Declared capabilities: everything except nothing — this is the most capable
 backend, and the reference for what the others are measured against. See
-`PLANNED_CAPABILITIES` in `src/relaykit/engines/chrome/__init__.py`.
+`PLANNED_CAPABILITIES` in `src/anybrowser/engines/chrome/__init__.py`.
 
 ## Scope
 
@@ -77,7 +77,7 @@ viewport shot.
 ## Definition of done
 
 ```bash
-pytest --pyargs relaykit_conformance --engine chrome
+pytest --pyargs anybrowser_conformance --engine chrome
 ```
 
 green, plus by hand — because the suite runs against a local fixture server and

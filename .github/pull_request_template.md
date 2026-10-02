@@ -11,7 +11,7 @@
 - [ ] `uv run ruff check . && uv run ruff format --check .`
 - [ ] `uv run mypy`
 - [ ] `uv run pytest`
-- [ ] `uv run pytest --pyargs relaykit_conformance --engine playwright`
+- [ ] `uv run pytest --pyargs anybrowser_conformance --engine playwright`
 - [ ] Tests that would have caught this, asserting observable behaviour rather
       than reading back what the code just set
 - [ ] `CHANGELOG.md` updated under `Unreleased`, if a user would notice

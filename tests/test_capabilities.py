@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from relaykit.core.engine import Capabilities, Capability
-from relaykit.core.errors import CapabilityNotSupported
+from anybrowser.core.engine import Capabilities, Capability
+from anybrowser.core.errors import CapabilityNotSupported
 
 
 def test_membership_is_the_api():
@@ -37,7 +37,7 @@ def test_undeclared_optional_methods_raise_the_shared_error():
     """
     import asyncio
 
-    from relaykit.core.engine import BrowserEngine
+    from anybrowser.core.engine import BrowserEngine
 
     class Minimal(BrowserEngine):
         name = "minimal"

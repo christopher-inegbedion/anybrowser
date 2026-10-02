@@ -60,6 +60,6 @@ hard-codes `changed=True`.
 `ToolResult.changed` carries this into agent history for exactly the same
 reason. A history that renders every no-op as "success" teaches the model that
 repeating the no-op is progress. See
-[`agent/tool.py`](../../src/relaykit/agent/tool.py).
+[`agent/tool.py`](../../src/anybrowser/agent/tool.py).
 
 See [ADR-0002](../adr/0002-truthful-outcomes.md).

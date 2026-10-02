@@ -3,7 +3,7 @@
 Not a real backend -- it drives nothing. It exists to show the shape, and to
 show that the conformance suite will refuse to be fooled by it:
 
-    pytest --pyargs relaykit_conformance --engine toy -p examples.custom_engine
+    pytest --pyargs anybrowser_conformance --engine toy -p examples.custom_engine
 
 fails immediately, because a backend that returns changed=True unconditionally
 cannot pass the honesty tests. That is the point.
@@ -11,9 +11,9 @@ cannot pass the honesty tests. That is the point.
 
 from __future__ import annotations
 
-from relaykit.core import engines
-from relaykit.core.engine import BrowserEngine, Capabilities, Capability, EngineInfo
-from relaykit.core.types import (
+from anybrowser.core import engines
+from anybrowser.core.engine import BrowserEngine, Capabilities, Capability, EngineInfo
+from anybrowser.core.types import (
     ActionOutcome,
     NavigationResult,
     Screenshot,

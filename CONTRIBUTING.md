@@ -1,4 +1,4 @@
-# Contributing to RelayKit
+# Contributing to AnyBrowser
 
 The most valuable thing you can contribute is **a backend for a browser we don't
 support**, because the conformance suite means neither of us has to argue about
@@ -7,11 +7,11 @@ whether it works.
 ## Setup
 
 ```bash
-git clone https://github.com/christopher-inegbedion/relaykit && cd relaykit
+git clone https://github.com/christopher-inegbedion/anybrowser && cd anybrowser
 uv venv && uv pip install -e ".[dev]"
 uv run playwright install chromium
 uv run pytest                                             # unit tests
-uv run pytest --pyargs relaykit_conformance --engine playwright   # the contract
+uv run pytest --pyargs anybrowser_conformance --engine playwright   # the contract
 ```
 
 ## Before you open a PR
@@ -48,8 +48,8 @@ short version:
 1. Subclass `BrowserEngine`, implement the abstract methods.
 2. Declare only capabilities you actually have. Under-claiming skips tests;
    over-claiming fails them. Both are fine, only one is dishonest.
-3. `pytest --pyargs relaykit_conformance --engine yours` until green.
-4. Ship it as your own package with a `relaykit.engines` entry point — you do
+3. `pytest --pyargs anybrowser_conformance --engine yours` until green.
+4. Ship it as your own package with a `anybrowser.engines` entry point — you do
    not need to vendor it here. Open an issue and we'll link it from the README.
 
 An engine lives in this repo only if it is one we commit to maintaining.
