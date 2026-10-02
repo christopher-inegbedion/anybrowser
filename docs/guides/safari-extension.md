@@ -71,12 +71,37 @@ extension; only a person can. You will also need *Allow unsigned extensions* in
 Safari ▸ Settings ▸ Developer — on Safari 26 it lives there, not in the Develop
 menu.
 
-**Then wake the background page.** Safari loads extension background content
+**Then click the toolbar button.** Safari loads extension background content
 lazily, and the bridge dials the engine when that page loads — so with the
 extension merely enabled, nothing connects and the engine refuses after its
-timeout. Develop ▸ Web Extension Background Content shows it as
-"(not loaded)"; opening its inspector loads it. Until the extension gets
-something that survives this, that wake is a required step before a run.
+timeout. Clicking the button fixes that: `action.onClicked` is dispatched by the
+browser, which has to load the background page to deliver it. The icon shows an
+"on" badge once the socket is up, and its tooltip names the endpoint either way.
+Measured: connected 25s after one click, from a background page asleep since
+browser launch.
+
+Develop ▸ Web Extension Background Content shows this state directly — it reads
+"(not loaded)" while the page is asleep — and opening that inspector also loads
+the page, which is a useful second route.
+
+## Two traps when iterating
+
+**Reinstalling the app duplicates the extension and resets site permissions.**
+Replacing the containing app leaves Safari's previous registration in place and
+adds another, so Settings ▸ Extensions lists the extension twice with no way to
+tell which one is live, while `pluginkit` reports only one. The per-site grants
+go with it, and Safari injects no content script until a site is permitted
+again — so perception stops working and the contract skips. Remove the stale
+entry and re-grant access after any reinstall, or overwrite the bundle in place
+rather than deleting and copying it.
+
+**Enabled is not permitted.** The tick in Settings ▸ Extensions, and the "can
+read and alter web pages you visit" banner, describe what the extension is
+allowed to *ask for*. Content scripts still do not run until a site is granted,
+which is a separate decision: click the toolbar button on a page and choose
+"Always Allow on Every Website". With nothing granted the bridge connects and
+still sees nothing, which reads like a broken engine rather than a missing
+permission.
 
 ### 3. Run
 
