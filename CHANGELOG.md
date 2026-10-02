@@ -8,6 +8,18 @@ Pre-1.0, the interfaces in `core/engine.py`, `daemon/protocol.py` and
 `models/provider.py` may change in a minor release. Each such change gets an ADR
 and a `BREAKING:` entry here.
 
+## [Unreleased]
+
+### Added
+
+- `anybrowser run --model-option KEY=VALUE`, repeatable, passed to the model
+  provider's constructor. Without it the CLI could only reach a provider's
+  default endpoint, so the OpenAI-compatible provider -- which exists to be
+  pointed at OpenRouter, vLLM or Ollama -- could not be used from the command
+  line at all. The conformance plugin already had the equivalent flag.
+- A `Command line` section in the README. The CLI shipped in 0.1.0 with five
+  subcommands and no documentation.
+
 ## [0.1.0] - 2026-10-02
 
 Published as `anybrowser`. The project was called RelayKit until first release;

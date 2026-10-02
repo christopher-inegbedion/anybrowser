@@ -140,6 +140,33 @@ rather than fails where that has not been done — see
 
 ---
 
+## Command line
+
+```bash
+anybrowser plugins                        # what is installed
+anybrowser info --engine chrome           # what that engine can do
+anybrowser look https://example.com       # open a page, print what is on it
+anybrowser serve --transport unix         # a daemon owning one browser
+anybrowser run "find the pricing page"    # give an agent a goal
+```
+
+`run` takes a provider and its constructor options, so any OpenAI-compatible
+endpoint works — a gateway, a local vLLM, Ollama:
+
+```bash
+anybrowser run "read the top pricing tier" \
+  --engine playwright \
+  --model openai --model-name google/gemini-3.5-flash \
+  --model-option base_url=https://openrouter.ai/api/v1 \
+  --model-option api_key=$OPENROUTER_API_KEY
+```
+
+`--confirm` asks before every action that changes the page, and `--max-steps`
+caps the run. Engine options use `-o KEY=VALUE`, for example
+`-o headless=true`.
+
+---
+
 ## Layout
 
 ```

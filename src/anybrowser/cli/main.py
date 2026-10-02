@@ -70,6 +70,16 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("goal")
     run.add_argument("--model", default="anthropic", help="Model provider (default: anthropic).")
     run.add_argument("--model-name", default="claude-sonnet-5", help="Model id.")
+    run.add_argument(
+        "--model-option",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Model provider constructor option, e.g. base_url=https://openrouter.ai/api/v1 "
+        "or api_key=sk-... . Repeatable. Without it the provider can only reach its own "
+        "default endpoint, which is why the OpenAI-compatible provider could not be "
+        "pointed at a gateway from here.",
+    )
     run.add_argument("--max-steps", type=int, default=25)
     run.add_argument(
         "--confirm",
@@ -80,12 +90,12 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _parse_options(pairs: Sequence[str]) -> dict[str, Any]:
+def _parse_options(pairs: Sequence[str], flag: str = "--option") -> dict[str, Any]:
     options: dict[str, Any] = {}
     for raw in pairs:
         key, _, value = raw.partition("=")
         if not key or not _:
-            raise SystemExit(f"malformed --option {raw!r}; expected KEY=VALUE")
+            raise SystemExit(f"malformed {flag} {raw!r}; expected KEY=VALUE")
         options[key.strip()] = _coerce(value)
     return options
 
@@ -199,7 +209,7 @@ async def cmd_serve(args: argparse.Namespace) -> int:
 async def cmd_run(args: argparse.Namespace) -> int:
     from ..agent import AgentRunner, LLMPlanner, RunConfig
 
-    provider = model_registry.get(args.model)()
+    provider = model_registry.get(args.model)(**_parse_options(args.model_option, "--model-option"))
     planner = LLMPlanner(provider, model=args.model_name)
 
     def confirm(decision: Any) -> bool:
