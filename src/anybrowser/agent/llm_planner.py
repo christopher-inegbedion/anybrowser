@@ -77,7 +77,7 @@ class LLMPlanner(Planner):
         model: str,
         max_elements: int = 60,
         temperature: float = 0.0,
-        max_tokens: int = 800,
+        max_tokens: int = 2048,
         system_prompt: str = SYSTEM_PROMPT,
     ) -> None:
         self._provider = provider
@@ -172,6 +172,18 @@ class LLMPlanner(Planner):
     def _parse(self, text: str, tools: Sequence[Tool]) -> Decision:
         payload = _extract_json(text)
         if payload is None:
+            # Distinguish a reply that was cut off from one that was never JSON.
+            # An answer truncated by the token budget starts as valid JSON and
+            # simply stops, and reporting that as "did not return JSON" blames
+            # the model for a limit we set -- which is what happened: a long
+            # narrative ran past 800 tokens and killed the run several steps in.
+            stripped = text.strip()
+            if stripped.startswith("{") and not stripped.endswith("}"):
+                raise ModelError(
+                    f"the planner's reply was cut off after {self._max_tokens} tokens; "
+                    "raise max_tokens on LLMPlanner. Partial reply: "
+                    f"{stripped[-120:]!r}"
+                )
             raise ModelError(f"planner did not return JSON: {text[:300]!r}")
 
         narrative = str(payload.get("narrative") or "").strip()
