@@ -17,7 +17,8 @@ model reads that as progress, sees the page unchanged, and clicks again. And
 again, until the run hits its action limit and reports the task complete.
 
 This is the single most common way a browser agent dies, and it is not a model
-problem — the model was told the click worked. Measured on Relay's own harness,
+problem — the model was told the click worked. Measured on a production agent
+harness,
 surfacing `no_change` truthfully took a repeat-action benchmark from 38% failure
 to 6%, with no change to the planner or the prompt.
 

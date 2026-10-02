@@ -20,13 +20,16 @@ or against a browser nobody has written a backend for yet.
 
 ## Why this exists
 
-Most browser automation assumes it owns the browser. RelayKit assumes it does
-not. It grew out of [Relay](https://relaythis.com), an agent that had to drive
-the user's *real* Chrome and Safari windows — their tabs, their sessions, no
-clean automation profile — and the abstractions here are the ones that survived
-contact with that.
+Most browser automation assumes it owns the browser: a fresh profile, a clean
+window, a driver launched with the right flags. That assumption breaks the
+moment the job is to work in the browser a person actually uses — their tabs,
+their sessions, their logins, already open. You cannot ask them to log in again
+inside a throwaway profile, and you cannot attach WebDriver to a window that was
+not started for automation.
 
-Three ideas do most of the work:
+RelayKit assumes it does not own the browser. Every abstraction here comes from
+driving real Chrome and Safari windows in production, and every one of the three
+ideas below is a failure mode that cost someone a week.
 
 **Backends differ in kind, not quality.** Safari has no CDP; Apple's Web
 Inspector protocol needs private entitlements. WebDriver cannot adopt your open

@@ -20,8 +20,9 @@ that owns exactly one background loop.
 
 **A synchronous interface, each backend hiding its own loop.** Rejected: the
 loop-hiding is then duplicated per backend, and every backend author gets to
-reinvent `run_coroutine_threadsafe` and its deadlocks. Relay did this and paid
-for it in a class of bug that only reproduced under concurrent tab operations.
+reinvent `run_coroutine_threadsafe` and its deadlocks. The production harness
+this interface was drawn from did exactly that, and paid for it in a class of
+bug that only reproduced under concurrent tab operations.
 
 **Both interfaces, generated.** Rejected as a maintenance trap: two surfaces
 drift, and the generated one is always the one with the worse stack traces.
