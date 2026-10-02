@@ -26,7 +26,6 @@ __all__ = [
     "PressKeyTool",
     "ScrollTool",
     "SelectOptionTool",
-    "SnapshotTool",
     "TypeTool",
     "UploadTool",
     "default_tools",
@@ -197,28 +196,8 @@ class UploadTool(_EngineTool):
         return ToolResult.of(outcome)
 
 
-class SnapshotTool(_EngineTool):
-    name = "look"
-    description = (
-        "Re-read the page. Use this after something changed and you need current element handles."
-    )
-    parameters: ClassVar[Mapping[str, Any]] = {"type": "object", "properties": {}}
-    mutating = False
-
-    async def _run(self, ctx: ToolContext, **_: Any) -> ToolResult:
-        page = await ctx.engine.snapshot()
-        ctx.snapshot = page
-        return ToolResult(
-            ok=True,
-            changed=False,
-            summary=f"{page.title} — {len(page.elements)} elements",
-            data={"url": page.url, "element_count": len(page.elements)},
-        )
-
-
 #: Everything a browsing agent needs, in the order a planner tends to reach for.
 BROWSER_TOOLS: tuple[type[Tool], ...] = (
-    SnapshotTool,
     ClickTool,
     TypeTool,
     PressKeyTool,
