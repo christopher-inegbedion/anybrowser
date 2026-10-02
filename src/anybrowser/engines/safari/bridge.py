@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["EngineStatus", "SafariBridge", "SafariBridgeError"]
 
+#: Per-line cap on the helper's stdout. A screenshot arrives as base64 on a
+#: single line, so the default 64KiB would fail every capture.
+_STREAM_LIMIT = 64 * 1024 * 1024
+
 
 class SafariBridgeError(EngineError):
     """The helper failed or refused."""
@@ -72,6 +76,12 @@ class SafariBridge:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
             env={**os.environ},
+            # The protocol is one JSON object per line, and a screenshot is a
+            # base64 PNG on that line -- far past asyncio's default 64KiB
+            # StreamReader limit, which raises LimitOverrunError ("Separator is
+            # not found, and chunk exceed the limit") rather than returning a
+            # short read. A full-screen capture is a few megabytes.
+            limit=_STREAM_LIMIT,
         )
 
     async def close(self) -> None:

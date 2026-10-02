@@ -48,10 +48,35 @@ python scripts/build_safari_extension.py --convert build/
 ```
 
 That assembles the extension, converts it to a macOS app with Apple's
-`safari-web-extension-converter`, and builds it. Then open the produced
-`.app` once and enable it in Safari ▸ Settings ▸ Extensions, granting it access
-to the sites you want automated. There is no API to enable an extension; only a
-person can.
+`safari-web-extension-converter`, and builds it. The command prints where the
+`.app` landed.
+
+**It must be signed with a real identity, and it must live in `/Applications`.**
+The build signs ad-hoc by default, and Safari ignores an ad-hoc-signed extension
+completely: it never appears in Settings ▸ Extensions, nothing is written to the
+log, and *"Allow unsigned extensions" does not cover it* — that setting is for
+development-signed builds. Re-sign the extension first, then the app, with an
+Apple Development identity:
+
+```bash
+codesign --force --sign "Apple Development: You (TEAMID)" --options runtime \
+  "/Applications/Your App.app/Contents/PlugIns/Your App Extension.appex"
+codesign --force --sign "Apple Development: You (TEAMID)" --options runtime \
+  "/Applications/Your App.app"
+```
+
+Then open the `.app` once and enable it in Safari ▸ Settings ▸ Extensions,
+granting it access to the sites you want automated. There is no API to enable an
+extension; only a person can. You will also need *Allow unsigned extensions* in
+Safari ▸ Settings ▸ Developer — on Safari 26 it lives there, not in the Develop
+menu.
+
+**Then wake the background page.** Safari loads extension background content
+lazily, and the bridge dials the engine when that page loads — so with the
+extension merely enabled, nothing connects and the engine refuses after its
+timeout. Develop ▸ Web Extension Background Content shows it as
+"(not loaded)"; opening its inspector loads it. Until the extension gets
+something that survives this, that wake is a required step before a run.
 
 ### 3. Run
 
