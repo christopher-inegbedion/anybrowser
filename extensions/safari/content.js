@@ -1,4 +1,4 @@
-// RelayKit's Safari bridge — the page half.
+// AnyBrowser's Safari bridge — the page half.
 //
 // Runs the same perception scripts the Chrome engine evaluates over CDP, so both
 // browsers see a page identically. It also owns synthetic pointer gestures:
@@ -13,8 +13,8 @@
   // Safari injects content scripts more than once on some navigations; a second
   // set of listeners would answer the same message twice and the caller would
   // take whichever arrived first.
-  if (window.__relaykitContentReady) return;
-  window.__relaykitContentReady = true;
+  if (window.__anybrowserContentReady) return;
+  window.__anybrowserContentReady = true;
 
   const dispatchPointer = (events) => {
     let dispatched = 0;
@@ -53,9 +53,9 @@
   const handle = (message) => {
     switch (message.kind) {
       case "perceive":
-        return window.__relaykitPerception.collect({ includeText: message.includeText });
+        return window.__anybrowserPerception.collect({ includeText: message.includeText });
       case "read":
-        return window.__relaykitPerception.read({ op: message.op, ...(message.args || {}) });
+        return window.__anybrowserPerception.read({ op: message.op, ...(message.args || {}) });
       case "pointer":
         return dispatchPointer(message.events || []);
       case "evaluate":

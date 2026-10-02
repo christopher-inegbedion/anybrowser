@@ -1,4 +1,4 @@
-// RelayKit's Chrome bridge.
+// AnyBrowser's Chrome bridge.
 //
 // The engine cannot attach to a browser the user started themselves: CDP over
 // the DevTools port needs --remote-debugging-port present from launch, and by
@@ -6,7 +6,7 @@
 // debugger session the *browser* hands out.
 //
 // So this is a relay, and deliberately nothing more. It holds no policy and
-// makes no decisions: it opens a WebSocket to a RelayKit engine, forwards CDP
+// makes no decisions: it opens a WebSocket to a AnyBrowser engine, forwards CDP
 // commands to chrome.debugger, and forwards events back. Everything about what
 // to do with a page lives in Python.
 //
@@ -269,7 +269,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 // A terminated service worker takes the socket with it. The alarm wakes us so
 // the engine is not left waiting on a bridge that quietly went away.
-chrome.alarms.create("relaykit-keepalive", { periodInMinutes: 0.5 });
+chrome.alarms.create("anybrowser-keepalive", { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener(() => {
   if (!socket || socket.readyState > WebSocket.OPEN) connect();
 });

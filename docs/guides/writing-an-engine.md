@@ -1,15 +1,15 @@
 # Writing an engine
 
-A backend for a browser RelayKit doesn't support. Budget a day for something
+A backend for a browser AnyBrowser doesn't support. Budget a day for something
 that works and a week for something that passes conformance cleanly — the gap
 between those two is where all the interesting bugs live.
 
 ## 1. Scaffold
 
 ```python
-from relaykit.core.engine import BrowserEngine, Capabilities, Capability, EngineInfo
-from relaykit.core.errors import EngineNotAvailable
-from relaykit.core.types import ActionOutcome, Snapshot, Viewport
+from anybrowser.core.engine import BrowserEngine, Capabilities, Capability, EngineInfo
+from anybrowser.core.errors import EngineNotAvailable
+from anybrowser.core.types import ActionOutcome, Snapshot, Viewport
 
 
 class FirefoxEngine(BrowserEngine):
@@ -35,15 +35,15 @@ which is exactly right for a capability you did not declare.
 
 ## 2. Register it
 
-In your own package — you do not need to fork RelayKit:
+In your own package — you do not need to fork AnyBrowser:
 
 ```toml
-[project.entry-points."relaykit.engines"]
+[project.entry-points."anybrowser.engines"]
 firefox = "my_package.engine:FirefoxEngine"
 ```
 
 ```python
-from relaykit import open_engine
+from anybrowser import open_engine
 
 engine = await open_engine("firefox")
 ```
@@ -51,7 +51,7 @@ engine = await open_engine("firefox")
 For tests, skip packaging entirely:
 
 ```python
-from relaykit.core import engines
+from anybrowser.core import engines
 
 engines.register("firefox", FirefoxEngine)
 ```
@@ -59,8 +59,8 @@ engines.register("firefox", FirefoxEngine)
 ## 3. Run the contract
 
 ```bash
-pytest --pyargs relaykit_conformance --engine firefox
-pytest --pyargs relaykit_conformance --engine firefox --engine-option headless=false
+pytest --pyargs anybrowser_conformance --engine firefox
+pytest --pyargs anybrowser_conformance --engine firefox --engine-option headless=false
 ```
 
 Green is the definition of done. Until then, work down the list — the tests are

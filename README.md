@@ -1,11 +1,11 @@
-# RelayKit
+# AnyBrowser
 
 **A browser-automation and agent runtime you can take apart.** Three interfaces —
 the browser, the transport, the model — each with a registry and a conformance
 suite, so "implement your own" is something you can verify rather than hope for.
 
 ```python
-from relaykit import open_engine
+from anybrowser import open_engine
 
 async with await open_engine("playwright") as engine:
     await engine.navigate("https://example.com")
@@ -27,7 +27,7 @@ their sessions, their logins, already open. You cannot ask them to log in again
 inside a throwaway profile, and you cannot attach WebDriver to a window that was
 not started for automation.
 
-RelayKit assumes it does not own the browser. Every abstraction here comes from
+AnyBrowser assumes it does not own the browser. Every abstraction here comes from
 driving real Chrome and Safari windows in production, and every one of the three
 ideas below is a failure mode that cost someone a week.
 
@@ -43,7 +43,7 @@ repeated forever. Every action returns `changed` alongside `ok`, and the
 conformance suite fails an engine that clicks dead space and calls it a change.
 See [truthful outcomes](docs/architecture/truthful-outcomes.md).
 
-**The contract is executable.** `pytest --pyargs relaykit_conformance --engine
+**The contract is executable.** `pytest --pyargs anybrowser_conformance --engine
 yours` is the definition of a working backend.
 
 ---
@@ -51,12 +51,12 @@ yours` is the definition of a working backend.
 ## Install
 
 ```bash
-pip install relaykit[playwright]      # the reference engine, easiest start
-pip install relaykit[chrome]          # attach to your own Chrome
-pip install relaykit[all]             # everything
+pip install anybrowser[playwright]      # the reference engine, easiest start
+pip install anybrowser[chrome]          # attach to your own Chrome
+pip install anybrowser[all]             # everything
 ```
 
-Python 3.10+. `import relaykit` pulls in no browser driver, no HTTP server and
+Python 3.10+. `import anybrowser` pulls in no browser driver, no HTTP server and
 no LLM SDK — every backend is an extra.
 
 The Playwright engine needs its browser binaries once, which pip cannot fetch
@@ -67,7 +67,7 @@ playwright install chromium
 ```
 
 Running a contract against something whose extra is missing skips rather than
-fails, and says which extra to install — so `pip install relaykit[all]` is the
+fails, and says which extra to install — so `pip install anybrowser[all]` is the
 shortcut if you would rather not think about it.
 
 ---
@@ -76,20 +76,20 @@ shortcut if you would rather not think about it.
 
 | You want to | Implement | Registry group | Ships with |
 |---|---|---|---|
-| Drive a different browser | [`BrowserEngine`](src/relaykit/core/engine.py) | `relaykit.engines` | `playwright`, `chrome`, `safari` |
-| Change how clients reach the daemon | [`DaemonTransport`](src/relaykit/daemon/transport.py) | `relaykit.transports` | `websocket`, `unix`, `memory` |
-| Use a different model | [`ModelProvider`](src/relaykit/models/provider.py) | `relaykit.models` | `openai`, `anthropic` |
+| Drive a different browser | [`BrowserEngine`](src/anybrowser/core/engine.py) | `anybrowser.engines` | `playwright`, `chrome`, `safari` |
+| Change how clients reach the daemon | [`DaemonTransport`](src/anybrowser/daemon/transport.py) | `anybrowser.transports` | `websocket`, `unix`, `memory` |
+| Use a different model | [`ModelProvider`](src/anybrowser/models/provider.py) | `anybrowser.models` | `openai`, `anthropic` |
 
 Register with an entry point and yours is selectable by name everywhere:
 
 ```toml
-[project.entry-points."relaykit.engines"]
+[project.entry-points."anybrowser.engines"]
 firefox = "my_package.engine:FirefoxEngine"
 ```
 
 ```bash
-pytest --pyargs relaykit_conformance --engine firefox     # the engine contract
-pytest --pyargs relaykit_conformance --transport grpc     # the transport one
+pytest --pyargs anybrowser_conformance --engine firefox     # the engine contract
+pytest --pyargs anybrowser_conformance --transport grpc     # the transport one
 ```
 
 Each flag selects a contract and skips the other. The suite is capability-gated. A backend that honestly declares it cannot drag
@@ -143,7 +143,7 @@ rather than fails where that has not been done — see
 ## Layout
 
 ```
-src/relaykit/
+src/anybrowser/
   core/          interfaces and value types — imports no backend
   engines/       chrome, safari, playwright
   perception/    turning a page into a snapshot, engine-agnostic
@@ -173,7 +173,7 @@ docs/            architecture, guides, ADRs
 ## Contributing
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md). Good first issues are labelled
-[`good first issue`](https://github.com/christopher-inegbedion/relaykit/labels/good%20first%20issue);
+[`good first issue`](https://github.com/christopher-inegbedion/anybrowser/labels/good%20first%20issue);
 a new backend is the highest-value contribution there is, and the conformance
 suite means you can tell when it's done.
 

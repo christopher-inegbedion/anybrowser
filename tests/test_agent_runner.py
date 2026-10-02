@@ -12,12 +12,12 @@ from collections.abc import Sequence
 
 import pytest
 
-from relaykit.agent import AgentRunner, Decision, Observation, Planner, RunConfig, StopReason
-from relaykit.agent.runner import render_history
-from relaykit.agent.tool import Tool
-from relaykit.core.engine import BrowserEngine, Capabilities, Capability, EngineInfo
-from relaykit.core.errors import StaleHandle
-from relaykit.core.types import (
+from anybrowser.agent import AgentRunner, Decision, Observation, Planner, RunConfig, StopReason
+from anybrowser.agent.runner import render_history
+from anybrowser.agent.tool import Tool
+from anybrowser.core.engine import BrowserEngine, Capabilities, Capability, EngineInfo
+from anybrowser.core.errors import StaleHandle
+from anybrowser.core.types import (
     ActionOutcome,
     Box,
     Element,

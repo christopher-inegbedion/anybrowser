@@ -25,9 +25,9 @@ Three steps, and the first one has a trap.
 ### 1. Build the native helper — with **your** bundle identifier
 
 ```python
-from relaykit.engines.safari import build_engine
+from anybrowser.engines.safari import build_engine
 
-build_engine("~/.relaykit", bundle_id="com.example.yourapp", app_name="Your App")
+build_engine("~/.anybrowser", bundle_id="com.example.yourapp", app_name="Your App")
 ```
 
 `bundle_id` must be the identifier of the application that ships the helper, not
@@ -72,7 +72,7 @@ with, so a planner routes around them instead of discovering it mid-task:
 ## Things that cost a build each
 
 **The perception JavaScript is not duplicated.** `scripts/build_safari_extension.py`
-copies it from `src/relaykit/perception/js/`, which is the same source the Chrome
+copies it from `src/anybrowser/perception/js/`, which is the same source the Chrome
 engine evaluates over CDP. That is what keeps both browsers seeing a page
 identically; there is no second copy to drift.
 

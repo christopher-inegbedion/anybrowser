@@ -10,6 +10,13 @@ and a `BREAKING:` entry here.
 
 ## [0.1.0] - 2026-10-02
 
+Published as `anybrowser`. The project was called RelayKit until first release;
+PyPI blocks the name as too similar to an existing `relay-kit`, and since nothing
+had shipped yet, renaming was cheaper than living with a confusable name in the
+same niche. The import name, the CLI, the `anybrowser.*` entry-point groups and
+the `ANYBROWSER_*` environment variables all moved with it. There is no
+compatibility shim, because there is no previous release to be compatible with.
+
 ### Added
 
 - `DaemonTransport.probe()`, mirroring `BrowserEngine.probe()`: a transport
@@ -28,7 +35,7 @@ and a `BREAKING:` entry here.
 - OpenAI-compatible and Anthropic model providers with multimodal requests,
   real SSE streaming, and token-based cost reporting.
 - Entry-point registries for engines, transports and models.
-- `relaykit_conformance`, the executable contracts — 32 engine tests, 10
+- `anybrowser_conformance`, the executable contracts — 32 engine tests, 10
   transport, 6 model — capability gated and installed as a pytest plugin, so a
   third-party backend runs them in its own repo with one command.
 - `PlaywrightEngine`, the reference backend. Passes conformance.
@@ -41,7 +48,7 @@ and a `BREAKING:` entry here.
 - `SyncEngine`, a blocking facade owning exactly one event loop.
 - Three transports — `memory`, `unix`, `websocket` — each shipping a server and
   its matching client, and each passing the 10-test transport contract.
-- `relaykit.perception`: engine-agnostic DOM perception, including deep-DOM
+- `anybrowser.perception`: engine-agnostic DOM perception, including deep-DOM
   helpers for open and closed shadow roots and iframe coordinate mapping.
 - `CdpConnection`, the seam between the Chrome engine and its pipe, so the
   DevTools WebSocket and extension-owned CDP share one engine.
@@ -50,7 +57,7 @@ and a `BREAKING:` entry here.
 
 ### Fixed
 
-- `relaykit.engines` (the subpackage) shadowed the engine registry re-exported
+- `anybrowser.engines` (the subpackage) shadowed the engine registry re-exported
   under the same name, so `available_engines()` raised on a fresh install while
   working in a checkout.
 - `ActionOutcome.failure` was called with `detail` both positionally and by
@@ -73,7 +80,7 @@ and a `BREAKING:` entry here.
   reports zero *with an explanation* rather than inventing a free call.
 - The agent runtime: `AgentRunner`, `LLMPlanner`, and eight browser tools.
 - A model-provider conformance suite (`--model`), opt-in because it spends money.
-- The `relaykit` CLI: `plugins`, `info`, `look`, `serve`, `run`.
+- The `anybrowser` CLI: `plugins`, `info`, `look`, `serve`, `run`.
 
 ### Fixed
 
@@ -84,7 +91,7 @@ and a `BREAKING:` entry here.
   passed the quoted label as the handle. Handles now have their own labelled
   column, and the tag is not printed twice.
 
-- `ChromeEngine(mode="extension")`: CDP relayed through the RelayKit browser
+- `ChromeEngine(mode="extension")`: CDP relayed through the AnyBrowser browser
   extension, attaching to the browser the user already has open. Passes the
   full engine contract. The extension itself is in `extensions/chrome`.
 

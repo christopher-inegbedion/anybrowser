@@ -1,8 +1,8 @@
-// RelayKit's Safari bridge — the background half.
+// AnyBrowser's Safari bridge — the background half.
 //
 // Safari exposes no CDP: the Web Inspector protocol needs private Apple
 // entitlements. So the Safari engine is split. The native helper
-// (relaykit.engines.safari) owns the things only the system can do — trusted
+// (anybrowser.engines.safari) owns the things only the system can do — trusted
 // clicks through the accessibility tree, screenshots of an occluded window,
 // native dialogs. This extension owns everything reachable from inside a page:
 // the DOM, element geometry, and synthetic pointer gestures.

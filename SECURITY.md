@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 **Do not open a public issue.** Report privately through
-[GitHub Security Advisories](https://github.com/christopher-inegbedion/relaykit/security/advisories/new),
+[GitHub Security Advisories](https://github.com/christopher-inegbedion/anybrowser/security/advisories/new),
 which needs no email address and keeps the report private until a fix ships.
 
 Include what you can: affected version, the engine or transport involved, a
@@ -17,7 +17,7 @@ Pre-1.0: the latest minor release only. After 1.0 this table gets real.
 
 ## What is in scope
 
-RelayKit drives a browser that is often *the user's own*, holding their logged-in
+AnyBrowser drives a browser that is often *the user's own*, holding their logged-in
 sessions. That makes a few things security-relevant that would be ordinary bugs
 elsewhere:
 
@@ -43,7 +43,7 @@ elsewhere:
 - Anything requiring an attacker to already have local code execution as the
   user — at that point they can drive the browser directly.
 
-## For people running RelayKit
+## For people running AnyBrowser
 
 The daemon should never be bound to a public interface. Default to the Unix
 socket transport; if you use WebSocket, bind loopback and set a token. Treat

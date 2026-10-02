@@ -9,8 +9,8 @@ from __future__ import annotations
 import asyncio
 import sys
 
-from relaykit import open_engine
-from relaykit.core import Capability
+from anybrowser import open_engine
+from anybrowser.core import Capability
 
 
 async def main(engine_name: str = "playwright") -> None:

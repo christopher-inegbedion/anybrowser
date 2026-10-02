@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from relaykit.core.types import ActionOutcome, Box, Point, Viewport
+from anybrowser.core.types import ActionOutcome, Box, Point, Viewport
 
 
 def test_normalized_maps_into_the_surface():

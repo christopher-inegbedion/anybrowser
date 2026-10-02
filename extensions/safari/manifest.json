@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "RelayKit Bridge",
+  "name": "AnyBrowser Bridge",
   "version": "0.1.0",
-  "description": "Lets RelayKit see and act on pages in your Safari windows, under your control.",
+  "description": "Lets AnyBrowser see and act on pages in your Safari windows, under your control.",
   "permissions": [
     "activeTab",
     "scripting",

@@ -3,7 +3,7 @@
 One required method:
 
 ```python
-from relaykit.models.provider import ModelProvider, Completion, Usage
+from anybrowser.models.provider import ModelProvider, Completion, Usage
 
 
 class BedrockProvider(ModelProvider):
@@ -15,7 +15,7 @@ class BedrockProvider(ModelProvider):
 ```
 
 ```toml
-[project.entry-points."relaykit.models"]
+[project.entry-points."anybrowser.models"]
 bedrock = "my_package.model:BedrockProvider"
 ```
 
