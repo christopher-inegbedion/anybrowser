@@ -38,6 +38,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
+import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -67,6 +69,8 @@ from ...perception.dom import build_snapshot, decode_handle
 from .bridge import SafariBridge
 from .build import engine_app_path, on_macos
 from .channel import SafariExtensionChannel
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["SUPPORTED_CAPABILITIES", "SafariEngine"]
 
@@ -238,8 +242,68 @@ class SafariEngine(BrowserEngine):
         tabs = [t for t in listing.get("tabs", ()) if t.get("tab_id")]
         if not tabs:
             raise EngineNotAvailable("Safari reported no tabs")
-        chosen = next((t for t in tabs if t.get("active")), tabs[0])
-        self._tab_id = str(chosen["tab_id"])
+        await self._attach(tabs)
+
+    async def _attach(self, tabs: Sequence[Mapping[str, Any]]) -> None:
+        """Attach to the active tab, and wait for its page to be answering.
+
+        It has to be the *active* tab. The native half resolves a window by the
+        URL that window is displaying, so a background tab is invisible to
+        accessibility -- `webArea` raises "no Safari window is showing <url>".
+        Attaching to a readable background tab breaks input while appearing to
+        fix perception: measured at 12 contract failures against 1.
+
+        The wait is the fix for the cold-start flake. `start()` only needs the
+        background page to answer `tabs`, so it used to return while the content
+        script in the target tab was still coming up, and the first action that
+        needed the page lost the race -- the first run of a session failing
+        tests that passed on every run after it.
+
+        Where the active tab is browser chrome -- a freshly launched Safari shows
+        the Start Page -- there is no page to perceive and no way to make one:
+        content scripts do not run on `favorites://`, and not on `about:blank`
+        either, which I tried. So the engine says so and starts anyway. Native
+        input still works, and the first perception call explains itself.
+        """
+        active = next((t for t in tabs if t.get("active")), tabs[0])
+        self._tab_id = str(active["tab_id"])
+        if not await self._wait_for_page(timeout=3.0):
+            logger.info(
+                "the active tab (%s) has no content script, so nothing on it can be "
+                "perceived; navigate to a page, or grant the extension access to this "
+                "site. Native input does not need one.",
+                active.get("url") or "?",
+            )
+
+    async def _wait_for_page(self, *, timeout: float = 5.0, poll: float = 0.2) -> bool:
+        """Wait until a content script in the chosen tab answers.
+
+        An open socket is not a ready page. ``start()`` reaches the background
+        page -- that is all ``tabs`` needs -- and returns, while the content
+        script in the target tab may still be coming up. The first action that
+        needs the page then loses the race, which is why the first run of a
+        session failed tests that passed on every run after it.
+
+        Deliberately not fatal. The native half works on a page the extension
+        cannot see -- accessibility clicks, field writes and keystrokes all land
+        on an unpermitted site -- so refusing to start would take away something
+        that works. A page that never answers leaves the first perception call
+        to explain itself, which it now does by naming the missing site grant.
+        """
+        deadline = time.monotonic() + timeout
+        while True:
+            with contextlib.suppress(Exception):
+                await self._read("href")
+                return True
+            if time.monotonic() >= deadline:
+                logger.debug(
+                    "no content script answered in tab %s within %.1fs; starting anyway, "
+                    "since native input does not need one",
+                    self._tab_id,
+                    timeout,
+                )
+                return False
+            await asyncio.sleep(poll)
 
     async def close(self) -> None:
         if self._channel is not None:

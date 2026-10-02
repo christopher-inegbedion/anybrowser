@@ -10,6 +10,15 @@ and a `BREAKING:` entry here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Safari: the first run of a session failed tests that passed on every run
+  after it. `start()` only needs the background page to answer `tabs`, so it
+  returned while the content script in the target tab was still coming up, and
+  whatever acted first lost the race. It now waits for the page to be
+  answering, which is not fatal if it never does -- native input works on a page
+  the extension cannot see, and the first perception call explains itself.
+
 ### Added
 
 - `BrowserEngine.await_change(timeout, poll, since)` and
