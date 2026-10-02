@@ -69,6 +69,8 @@ compatibility shim, because there is no previous release to be compatible with.
 
 ### Fixed
 
+- `python -m anybrowser.cli.main --help` no longer emits a runpy warning from
+  the CLI package exporting a function with the same name as the submodule.
 - `anybrowser.engines` (the subpackage) shadowed the engine registry re-exported
   under the same name, so `available_engines()` raised on a fresh install while
   working in a checkout.

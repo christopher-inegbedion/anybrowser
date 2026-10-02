@@ -47,7 +47,7 @@ dev = [
 ]
 
 [project.scripts]
-anybrowser = "anybrowser.cli.main:main"
+anybrowser = "anybrowser.cli.app:main"
 
 # Registered as a pytest plugin so `--engine` works from any rootdir, which is
 # what makes `pytest --pyargs anybrowser_conformance --engine yours` a one-liner
