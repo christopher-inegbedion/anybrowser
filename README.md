@@ -107,7 +107,7 @@ Full walkthrough: [**Writing an engine**](docs/guides/writing-an-engine.md).
 | `chrome` (DevTools) | no — needs the launch flag | yes | **28 passed, 4 skipped** | yes |
 | `chrome` (extension) | **yes** — your own windows | yes | **28 passed, 4 skipped** (2026-10-02, Chrome 154) | no — needs a browser with the extension loaded |
 | `playwright` | no — own profile | yes | **28 passed, 4 skipped** | yes, the reference engine |
-| `safari` | yes — accessibility + extension | yes | **25 passed, 7 skipped** once (2026-10-02, Safari 26.5); see the caveat below | only that it refuses cleanly off-setup |
+| `safari` | yes — accessibility + extension | yes | **25 passed, 7 skipped** (2026-10-02, Safari 26.5, macOS 26.5; 3 consecutive runs) | only that it refuses cleanly off-setup |
 
 The engine contract is 32 tests. The 4 skips are the capability gate working as
 intended: those tests assert the *error* an engine raises for something it does
@@ -139,14 +139,17 @@ real user activation (`isTrusted=true`), which is the whole reason the native
 half exists. Seven tests stand down: `file_upload`, `full_page_screenshot` and
 `cross_origin_frames` are honestly undeclared, and four are the capability gate.
 
-**That figure is not currently reproducible, and the reason is worth knowing
-before you try.** Reinstalling the containing app adds a *second* Safari
-extension entry and resets the extension's per-site permissions. Safari then
-injects no content script until a site is permitted again, so perception stops
-working and the suite skips. Iterating on the extension therefore invalidates
-the previous run's setup every time, which is a property of Safari rather than
-of this engine — but it means a dated number here describes one machine in one
-state, and re-verifying after any reinstall is not optional.
+**Reproducing it depends on one thing that is easy to get wrong.** Safari grants
+an extension access per origin, and the suite serves its fixtures from
+`127.0.0.1` — so permitting the site you happen to be looking at is not enough.
+Choose *Always Allow on Every Website*, or the fixtures stay unpermitted, no
+content script runs on them, and every test that touches the page fails while
+the bridge itself connects and reports no problem.
+
+The bridge now says so itself: its greeting carries `content_script`, which is
+`"ok"` only when a content script in the active tab actually answered. Trust
+that over `permissions.getAll()`, which reports what the extension *asked for*
+and says `<all_urls>` even when Safari is injecting nothing anywhere.
 
 Uploads are the notable absence. A file input's `files` cannot be set from
 JavaScript, by design, and without a debugger protocol there is no counterpart
