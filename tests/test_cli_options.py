@@ -9,10 +9,14 @@ default endpoint.
 from __future__ import annotations
 
 import argparse
+import importlib
+import os
+import subprocess
+import sys
 
 import pytest
 
-from anybrowser.cli.main import _parse_options, build_parser, cmd_run
+from anybrowser.cli.app import _parse_options, build_parser, cmd_run
 
 
 def test_model_options_parse_into_constructor_kwargs():
@@ -57,6 +61,26 @@ def test_the_run_parser_accepts_repeated_model_options():
     ]
 
 
+def test_cli_main_module_is_reachable_as_a_package_attribute():
+    import anybrowser.cli
+
+    module = importlib.import_module("anybrowser.cli.main")
+    assert anybrowser.cli.main is module
+
+
+def test_cli_main_module_runs_without_runpy_warning():
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)}
+    result = subprocess.run(
+        [sys.executable, "-m", "anybrowser.cli.main", "--help"],
+        check=False,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "RuntimeWarning" not in result.stderr
+
+
 class _Sentinel(Exception):
     pass
 
@@ -74,17 +98,13 @@ async def test_the_options_reach_the_provider_constructor(monkeypatch):
             seen.update(kwargs)
             raise _Sentinel
 
-    # Swap the whole registry cmd_run looks up. Two wrinkles force this shape:
-    # `anybrowser.cli.main` as an attribute resolves to the exported *function*,
-    # not the module, so the module comes from sys.modules; and Registry is
-    # slotted, so its `get` cannot be patched in place.
-    import sys
-
+    # Swap the whole registry cmd_run looks up. Registry is slotted, so its
+    # `get` cannot be patched in place.
     class FakeRegistry:
         def get(self, name: str) -> type:
             return SpyProvider
 
-    monkeypatch.setattr(sys.modules["anybrowser.cli.main"], "model_registry", FakeRegistry())
+    monkeypatch.setattr("anybrowser.cli.app.model_registry", FakeRegistry())
     args = argparse.Namespace(
         engine="playwright",
         option=[],
