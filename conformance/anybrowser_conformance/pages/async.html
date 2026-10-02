@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>AnyBrowser async fixture</title>
+<!--
+  For the await_change contract.
+
+  The change is in TEXT only, with no element added or removed. That is the
+  realistic shape of a result landing -- a request returns and a line of copy
+  appears -- and it is the case an element-derived fingerprint misses entirely.
+  A fixture that added a button would let a weaker signature pass.
+
+  The delay is long enough that an engine cannot answer from the page as it
+  stood when asked, and short enough not to pad the suite.
+-->
+<h1>Async fixture</h1>
+<button id="start">Start</button>
+<p id="status">idle</p>
+<script>
+  document.getElementById('start').addEventListener('click', () => {
+    document.getElementById('status').textContent = 'working';
+    setTimeout(() => {
+      document.getElementById('status').textContent = 'landed';
+    }, 700);
+  });
+</script>

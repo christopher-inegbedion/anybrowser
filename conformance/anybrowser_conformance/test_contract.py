@@ -188,6 +188,49 @@ def test_press_key_reaches_the_page(engine, run, base_url):
     assert _log(engine, run) == "key:Enter"
 
 
+def test_await_change_waits_for_something_that_lands_late(engine, run, base_url):
+    """The case an agent cannot handle any other way: a result still in flight.
+
+    The fixture changes only its text, 700ms after the click, adding and
+    removing no elements. That is deliberate -- it is the shape of a request
+    returning, and an element-derived fingerprint does not move for it. An
+    engine whose page_signature ignores text fails here, which is the point.
+    """
+    run(engine.navigate(f"{base_url}/async.html"))
+    page = run(engine.snapshot())
+    run(engine.click(_find(page, "Start")))
+    outcome = run(engine.await_change(timeout=5.0))
+    assert outcome.ok and outcome.changed, "waited for a late change and did not see it"
+
+
+def test_await_change_reports_a_page_that_never_changes(engine, run, base_url):
+    """A timeout is an outcome, not an error.
+
+    An exception here would push callers into treating "not yet" as "broken",
+    and the honest answer -- nothing happened -- is the one ADR-0002 is about.
+    """
+    run(engine.navigate(f"{base_url}/async.html"))
+    outcome = run(engine.await_change(timeout=1.0, poll=0.1))
+    assert outcome.ok, "a page that did not change is not a failure"
+    assert not outcome.changed
+    assert "did not change" in outcome.detail
+
+
+def test_page_signature_moves_with_text_not_just_elements(engine, run, base_url):
+    """What await_change is built on, tested directly.
+
+    Clicking the fixture changes one paragraph's text and nothing else. A
+    signature that only fingerprints the element set reports no change, and
+    every wait built on it returns too early.
+    """
+    run(engine.navigate(f"{base_url}/async.html"))
+    before = run(engine.page_signature())
+    page = run(engine.snapshot())
+    run(engine.click(_find(page, "Start")))
+    after = run(engine.page_signature())
+    assert before != after, "the signature ignored a text-only change"
+
+
 def test_scroll_moves_and_reports_it(engine, run, base_url):
     run(engine.navigate(f"{base_url}/index.html"))
     before = run(engine.viewport()).scroll_y

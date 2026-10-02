@@ -205,6 +205,9 @@ class DaemonServer:
         async def title() -> str:
             return await engine.title()
 
+        async def page_signature() -> str:
+            return await engine.page_signature()
+
         async def viewport() -> dict[str, Any]:
             return codec.dump_viewport(await engine.viewport())
 
@@ -233,6 +236,7 @@ class DaemonServer:
             {
                 "engine.url": url,
                 "engine.title": title,
+                "engine.page_signature": page_signature,
                 "engine.viewport": viewport,
                 "engine.snapshot": snapshot,
                 "engine.screenshot": screenshot,

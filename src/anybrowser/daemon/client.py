@@ -255,6 +255,9 @@ class RemoteEngine(BrowserEngine):
     async def title(self) -> str:
         return str(await self._call("engine.title"))
 
+    async def page_signature(self) -> str:
+        return str(await self._call("engine.page_signature"))
+
     async def viewport(self) -> Viewport:
         return codec.load_viewport(await self._call("engine.viewport"))
 

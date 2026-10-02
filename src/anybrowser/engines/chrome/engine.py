@@ -702,14 +702,15 @@ class ChromeEngine(BrowserEngine):
         }
         return sum(bits[item] for item in set(modifiers))
 
-    async def _signature(self) -> str:
+    async def page_signature(self) -> str:
+        """See :meth:`BrowserEngine.page_signature`."""
         return str(await self._read("signature"))
 
     async def _settle(self, before: str, changed: str, unchanged: str) -> ActionOutcome:
         for _ in range(6):
             await asyncio.sleep(0.05)
             try:
-                after = await self._signature()
+                after = await self.page_signature()
             except EngineError:
                 return ActionOutcome(ok=True, changed=True, detail="page navigated")
             if after != before:
@@ -725,7 +726,7 @@ class ChromeEngine(BrowserEngine):
         modifiers: Sequence[KeyModifier] = (),
     ) -> ActionOutcome:
         point = await self._point_for(target)
-        before = await self._signature()
+        before = await self.page_signature()
         common = {
             "x": point.x,
             "y": point.y,
@@ -794,7 +795,7 @@ class ChromeEngine(BrowserEngine):
         self, key: str, *, modifiers: Sequence[KeyModifier] = (), repeat: int = 1
     ) -> ActionOutcome:
         key_name, code, virtual, text = self._key_description(key)
-        before = await self._signature()
+        before = await self.page_signature()
         common: dict[str, Any] = {
             "key": key_name,
             "code": code,
@@ -868,7 +869,7 @@ class ChromeEngine(BrowserEngine):
 
     async def hover(self, target: Element | Point) -> ActionOutcome:
         point = await self._point_for(target)
-        before = await self._signature()
+        before = await self.page_signature()
         await self._send(
             "Input.dispatchMouseEvent", {"type": "mouseMoved", "x": point.x, "y": point.y}
         )
@@ -883,7 +884,7 @@ class ChromeEngine(BrowserEngine):
     ) -> ActionOutcome:
         if len(path) < 2:
             return ActionOutcome.failure("a drag needs at least two points")
-        before = await self._signature()
+        before = await self.page_signature()
         buttons = {MouseButton.LEFT: 1, MouseButton.RIGHT: 2, MouseButton.MIDDLE: 4}[button]
         first = path[0]
         await self._send(

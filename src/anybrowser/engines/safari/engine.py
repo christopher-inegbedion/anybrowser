@@ -279,7 +279,8 @@ class SafariEngine(BrowserEngine):
             return result.get("value", result)
         return result
 
-    async def _signature(self) -> str:
+    async def page_signature(self) -> str:
+        """See :meth:`BrowserEngine.page_signature`."""
         with contextlib.suppress(Exception):
             return str(await self._read("signature"))
         return ""
@@ -288,7 +289,7 @@ class SafariEngine(BrowserEngine):
         """Decide honestly whether the page moved. See truthful-outcomes.md."""
         for _ in range(6):
             await asyncio.sleep(0.05)
-            if await self._signature() != before:
+            if await self.page_signature() != before:
                 return ActionOutcome(ok=True, changed=True, detail=changed)
         return ActionOutcome.no_change(unchanged)
 
@@ -451,7 +452,7 @@ class SafariEngine(BrowserEngine):
         clipboard, media, file pickers -- while reporting success.
         """
         point = await self._point_for(target)
-        before = await self._signature()
+        before = await self.page_signature()
         url = await self.url()
         result = await self._require_bridge().press(
             window=self._window, x=point.x, y=point.y, url=url
@@ -499,7 +500,7 @@ class SafariEngine(BrowserEngine):
         keys have to go through ``key code``, which is why :data:`_KEY_CODES`
         exists; anything not in it is sent as text.
         """
-        before = await self._signature()
+        before = await self.page_signature()
         if key in _KEY_CODES:
             action = f"key code {_KEY_CODES[key]}"
         else:
@@ -555,13 +556,13 @@ class SafariEngine(BrowserEngine):
         events = [{"type": "pointerdown", "x": path[0].x, "y": path[0].y, "buttons": 1}]
         events += [{"type": "pointermove", "x": p.x, "y": p.y, "buttons": 1} for p in path[1:]]
         events.append({"type": "pointerup", "x": path[-1].x, "y": path[-1].y, "buttons": 0})
-        before = await self._signature()
+        before = await self.page_signature()
         await self._require_channel().request("pointer", {"tabId": self._tab_id, "events": events})
         return await self._settle(before, "dragged", "the drag moved nothing")
 
     async def hover(self, target: Element | Point) -> ActionOutcome:
         point = await self._point_for(target)
-        before = await self._signature()
+        before = await self.page_signature()
         await self._require_channel().request(
             "pointer",
             {
