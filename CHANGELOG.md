@@ -12,6 +12,8 @@ and a `BREAKING:` entry here.
 
 ### Fixed
 
+- The custom-engine reference skeleton now prints usage instructions when run
+  directly instead of exiting silently.
 - Safari: **`AXManualAccessibility` was never set**, so WebKit handed out an
   accessibility tree that could be read but not acted on. Roles, titles and
   frames resolved, `AXPress` appeared in the element's actions, performing it
