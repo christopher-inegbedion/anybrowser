@@ -1,8 +1,8 @@
 # Porting
 
-The Chrome and Safari engines are being lifted out of
-[Relay](https://relaythis.com)'s daemon, where they ran in production, onto the
-`BrowserEngine` interface. This directory tracks what that involves.
+The Chrome and Safari engines were lifted out of a production agent daemon, where
+they ran against real user browsers, onto the `BrowserEngine` interface. This
+directory tracks what that involved.
 
 The order is deliberate: **the interface and the conformance suite were written
 first**, so the port is graded by a suite that predates it rather than described

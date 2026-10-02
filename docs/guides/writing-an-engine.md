@@ -101,7 +101,7 @@ and roughly everything else people actually automate.
 
 If your move events don't set `buttons=1`, drag will look perfect from your side
 and move nothing on any page that checks `event.buttons` — which is most of
-them, and all HTML5 drag-and-drop. Relay shipped this bug: 45% of drags silently
+them, and all HTML5 drag-and-drop. This bug shipped in production once: 45% of drags silently
 failed while reporting 100% success. `test_drag_carries_the_pressed_button`
 exists because of it.
 

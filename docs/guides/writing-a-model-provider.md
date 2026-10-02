@@ -29,7 +29,8 @@ something upstream is metering against it.
 **Answer `supports_images` from a table.** Several text-only models reject an
 image-bearing request with a 4xx that reads exactly like a transport error, so a
 wrong answer here surfaces as a mysterious intermittent failure hours later.
-Relay lost an afternoon to precisely this with a model that was 405-on-images.
+A production harness lost an afternoon to precisely this with a model that was
+405-on-images.
 
 **Implement `stream` if your API can.** Streaming is what makes a running agent
 interruptible mid-decision: a blocking completion call cannot be steered or

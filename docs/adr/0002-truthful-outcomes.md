@@ -10,7 +10,7 @@ cleanly, and changes nothing. The engine reports success. History renders
 "Result: success". The model reads that as progress and repeats the action until
 the run hits its limit — often then reporting the task complete.
 
-Relay measured this on its own harness. Surfacing no-ops truthfully in history
+This was measured on a production agent harness. Surfacing no-ops truthfully in history
 moved a repeat-action benchmark from 38% failure to 6%, with no change to the
 planner, the prompt, or the model.
 

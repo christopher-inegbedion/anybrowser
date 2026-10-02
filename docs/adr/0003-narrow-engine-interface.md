@@ -9,8 +9,9 @@ the obvious move was to make `BrowserEngine` look like it: `locator()`,
 `frame()`, `evaluate_handle()`, `wait_for_load_state()`, chained element
 handles. Everything already written against Playwright would then port for free.
 
-Relay did exactly this. Its CDP backend implements a `PageFacade` presenting the
-Playwright `Page` surface over a raw debugger connection. It is 1,480 lines,
+The production harness this interface was drawn from did exactly this. Its CDP
+backend presents the Playwright `Page` surface over a raw debugger connection
+via an adapter class. That adapter is 1,480 lines,
 most of them reproducing behaviour that only exists because Playwright is
 structured the way it is.
 
