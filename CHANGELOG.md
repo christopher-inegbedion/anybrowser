@@ -10,7 +10,27 @@ and a `BREAKING:` entry here.
 
 ## [Unreleased]
 
+### Removed
+
+- The `look` tool. `AgentRunner` re-observes before every decision -- its
+  docstring says so and `_observe()` does it -- so `look` fetched a snapshot
+  that had already been taken for that same step. It cost a step, counted
+  toward the stuck breaker, and returned what the planner was holding anyway;
+  an agent asked to read a page would call it repeatedly and be stopped as
+  stuck. The prompt no longer suggests it, and says the page is re-read for
+  you.
+
 ### Fixed
+
+- The planner never showed the page's **text**. `Snapshot.text` has been
+  populated all along -- `snapshot(include_text=True)` is the default -- and the
+  prompt renderer printed the URL, the title and the element list, then dropped
+  it. So an agent could see what was clickable and never what the page said:
+  any goal of the form "tell me what it says" was unreachable, and a search
+  that worked could not report its results. Rendered now, capped, with the cut
+  marked so a model knows there is more rather than reading a sentence that
+  stops mid-word as the end of the page.
+
 
 - Safari: **`AXManualAccessibility` was never set**, so WebKit handed out an
   accessibility tree that could be read but not acted on. Roles, titles and

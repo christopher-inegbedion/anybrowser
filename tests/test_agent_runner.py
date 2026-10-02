@@ -137,25 +137,26 @@ async def test_repeated_no_ops_break_the_loop():
 
 
 async def test_alternating_actions_that_change_nothing_still_count_as_stuck():
-    """The commonest loop is not a repeat: it is act, look, act, look.
+    """The commonest loop is not a repeat: it is act, scroll, act, scroll.
 
     Measuring repetition misses it entirely -- no two consecutive actions are
     the same, and the run burns its whole budget going nowhere. What matters is
     that nothing changed, whatever shape the actions took.
+
+    Both actions here are real tools that genuinely report no change. This test
+    used to alternate with `look`, and when that tool was removed it kept
+    passing for the wrong reason: an unknown tool name fails, a failure also
+    counts as no change, and the name still appeared in the error string. A test
+    that passes whether or not its subject exists is not testing anything.
     """
     engine = _Engine(clicks_work=False)
-    alternating = _Scripted(
-        [
-            d
-            for _ in range(10)
-            for d in (_click(), Decision(tool="look", arguments={}, narrative="re-read"))
-        ]
-    )
+    scroll = Decision(tool="scroll", arguments={"dy": 400}, narrative="look further down")
+    alternating = _Scripted([d for _ in range(10) for d in (_click(), scroll)])
     runner = AgentRunner(engine, alternating, config=RunConfig(max_steps=20, repeat_limit=4))
     result = await runner.run("loop without repeating")
     assert result.stop_reason == StopReason.STUCK
     assert result.step_count == 4
-    assert "click" in result.error and "look" in result.error
+    assert "click" in result.error and "scroll" in result.error
 
 
 async def test_a_changed_result_resets_the_breaker():
