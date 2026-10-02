@@ -107,7 +107,7 @@ Full walkthrough: [**Writing an engine**](docs/guides/writing-an-engine.md).
 | `chrome` (DevTools) | no — needs the launch flag | yes | **28 passed, 4 skipped** | yes |
 | `chrome` (extension) | **yes** — your own windows | yes | **28 passed, 4 skipped** (2026-10-02, Chrome 154) | no — needs a browser with the extension loaded |
 | `playwright` | no — own profile | yes | **28 passed, 4 skipped** | yes, the reference engine |
-| `safari` | yes — accessibility + extension | yes | **25 passed, 7 skipped** (2026-10-02, Safari 26.5, macOS 26.5; 3 consecutive runs) | only that it refuses cleanly off-setup |
+| `safari` | yes — accessibility + extension | yes | **25 passed, 7 skipped** (2026-10-02, Safari 26.5, macOS 26.5; 6 of 7 runs, see [#23](https://github.com/christopher-inegbedion/anybrowser/issues/23)) | only that it refuses cleanly off-setup |
 
 The engine contract is 32 tests. The 4 skips are the capability gate working as
 intended: those tests assert the *error* an engine raises for something it does
