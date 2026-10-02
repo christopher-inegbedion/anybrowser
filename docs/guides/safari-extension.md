@@ -105,13 +105,23 @@ where a delete-and-copy added one each time. If you already have duplicates,
 remove the stale ones in Settings ▸ Extensions once — in-place updates will not
 add more.
 
-**Enabled is not permitted.** The tick in Settings ▸ Extensions, and the "can
-read and alter web pages you visit" banner, describe what the extension is
-allowed to *ask for*. Content scripts still do not run until a site is granted,
-which is a separate decision: click the toolbar button on a page and choose
-"Always Allow on Every Website". With nothing granted the bridge connects and
-still sees nothing, which reads like a broken engine rather than a missing
-permission.
+**Enabled is not permitted, and the grant is per origin.** The tick in
+Settings ▸ Extensions, and the "can read and alter web pages you visit" banner,
+describe what the extension is allowed to *ask for*. `permissions.getAll()` says
+`<all_urls>` for the same reason, which makes it a useless check. Content
+scripts do not run until a *site* is granted, and granting one site grants only
+that site.
+
+This matters for the conformance suite, which serves its fixtures from
+`127.0.0.1`. Permitting the site you happen to be looking at is not enough:
+choose **Always Allow on Every Website**, or the suite's own pages stay
+unpermitted and every test that touches the page fails while the bridge itself
+connects happily.
+
+The bridge reports this in its greeting, so you do not have to guess. `hello`
+carries `content_script`, which is `"ok"` when a content script in the active
+tab answered and says so plainly when it did not — the difference between
+"unpermitted" and "broken" being otherwise invisible from the engine's side.
 
 ### 3. Run
 

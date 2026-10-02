@@ -160,4 +160,22 @@ class SafariExtensionChannel:
 
         if not reply.get("ok"):
             raise EngineError(str(reply.get("error") or f"{kind} failed"))
-        return reply.get("result")
+        if "result" not in reply:
+            # A command that answers nothing. Not the same as answering null,
+            # and not the same as the page failing to answer -- see below.
+            return {}
+        result = reply["result"]
+        if result is None:
+            # The extension forwarded a request to a content script that did not
+            # answer. Overwhelmingly this means no content script is running in
+            # that tab, and in Safari that means the *site* is not permitted --
+            # being enabled is a separate thing. Say that, rather than handing
+            # the caller a None it will fail on one frame later with an
+            # AttributeError that names nothing useful.
+            raise EngineError(
+                f"the page did not answer {kind}: no content script is running in "
+                "that tab. Safari injects none until the site is permitted -- "
+                "click the extension's toolbar button on the page and choose "
+                "'Always Allow on Every Website'."
+            )
+        return result

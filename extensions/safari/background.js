@@ -123,9 +123,44 @@ const connect = async () => {
     return;
   }
 
-  socket.onopen = () => {
+  socket.onopen = async () => {
     reconnectDelay = RECONNECT_MIN_MS;
-    send({ type: "hello", protocol_version: PROTOCOL_VERSION, browser: navigator.userAgent });
+    // Report what this extension can actually see, not just that it is here.
+    // Being enabled is not the same as being permitted: Safari injects no
+    // content script until a site is granted, so the bridge can connect and
+    // still be blind. Saying so in the greeting turns that from a mystery --
+    // perception returning nothing, for no stated reason -- into a fact the
+    // engine can act on.
+    let granted = null;
+    try {
+      granted = await browser.permissions.getAll();
+    } catch {
+      // Older Safari, or the API is unavailable. Unknown, not empty.
+    }
+    // Whether a content script can actually be reached, which is the thing
+    // that matters. permissions.getAll() reports what the extension *asked
+    // for*, not what any site has granted, so it says "<all_urls>" even when
+    // Safari is injecting nothing anywhere.
+    let reach = "unknown";
+    try {
+      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      if (!tab) {
+        reach = "no active tab";
+      } else {
+        const reply = await browser.tabs.sendMessage(tab.id, { kind: "ping" });
+        reach = reply === undefined ? "no content script in the active tab" : "ok";
+      }
+    } catch (err) {
+      reach = `content script unreachable: ${String((err && err.message) || err)}`;
+    }
+    send({
+      type: "hello",
+      protocol_version: PROTOCOL_VERSION,
+      browser: navigator.userAgent,
+      origins: granted ? granted.origins || [] : null,
+      permissions: granted ? granted.permissions || [] : null,
+      content_script: reach,
+    });
     showState();
   };
 
