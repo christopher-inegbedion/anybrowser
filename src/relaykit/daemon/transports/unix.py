@@ -95,6 +95,19 @@ class UnixSocketTransport(BaseTransport):
     name = "unix"
     client_class: type[DaemonClient]
 
+    @classmethod
+    async def probe(cls) -> None:
+        """Refuse where the platform has no Unix domain sockets, i.e. Windows.
+
+        Unavailable, not broken -- the same distinction the engine registry
+        relies on to fall through to another backend.
+        """
+        if not hasattr(socket, "AF_UNIX"):
+            raise TransportError(
+                "unix domain sockets are not available on this platform; "
+                "use the websocket transport instead"
+            )
+
     def __init__(self, path: str = "", *, mode: int = 0o600) -> None:
         super().__init__()
         self._path = (

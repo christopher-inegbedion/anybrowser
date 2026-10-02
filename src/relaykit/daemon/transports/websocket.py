@@ -59,6 +59,15 @@ class WebSocketTransport(BaseTransport):
     name = "websocket"
     client_class: type[DaemonClient]
 
+    @classmethod
+    async def probe(cls) -> None:
+        """Refuse when the ``websockets`` extra is not installed.
+
+        Reuses the same import path the transport itself uses, so the message a
+        user sees from a probe and from a real failure cannot drift apart.
+        """
+        _websockets()
+
     def __init__(self, host: str = "127.0.0.1", port: int = 0) -> None:
         super().__init__()
         self._host = host

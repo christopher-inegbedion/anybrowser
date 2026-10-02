@@ -51,6 +51,21 @@ class DaemonTransport(abc.ABC):
     #: Registry name. Must match the entry-point key.
     name: str = ""
 
+    @classmethod
+    async def probe(cls) -> None:
+        """Raise :class:`~relaykit.core.errors.TransportError` if unusable here.
+
+        The mirror of :meth:`~relaykit.core.engine.BrowserEngine.probe`, and for
+        the same reason: a transport whose optional dependency is absent, or
+        whose primitive the platform lacks, is *unavailable*, not broken. The
+        conformance suite skips on a refusal instead of failing, so a fresh
+        install does not open with red tests the user did not cause.
+
+        Cheap and side-effect free -- bind no socket, start no server. The
+        default implementation assumes the transport is always available.
+        """
+        return None
+
     @abc.abstractmethod
     async def serve(self, handler: MessageHandler) -> None:
         """Listen until cancelled, calling ``handler`` for every inbound message.

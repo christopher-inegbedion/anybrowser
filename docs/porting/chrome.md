@@ -1,6 +1,6 @@
 # Porting: the Chrome engine
 
-**Status:** both pipes done. `devtools` passes the engine contract 29/29 and is gated by CI; `extension` passes it on a local run and cannot be gated by CI, since it needs a browser with the extension loaded. See [driving your own Chrome](../guides/chrome-extension.md).
+**Status:** both pipes done. `devtools` passes the engine contract (28 passed, 4 capability-gated skips) and is gated by CI; `extension` passes it on a local run and cannot be gated by CI, since it needs a browser with the extension loaded. See [driving your own Chrome](../guides/chrome-extension.md).
 
 ## What it is
 

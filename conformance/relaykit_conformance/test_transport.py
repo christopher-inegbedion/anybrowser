@@ -27,9 +27,20 @@ def transport_name(pytestconfig: pytest.Config) -> str:
 
 @pytest.fixture
 def transport(transport_name: str):
+    from relaykit.core.errors import TransportError
     from relaykit.core.registry import transports
 
-    return transports.get(transport_name)()
+    cls = transports.get(transport_name)
+    # Unavailable here is not the same as broken. A transport whose optional
+    # dependency is absent, or whose primitive this platform lacks, refuses from
+    # probe() and the contract stands down -- the same rule the engine contract
+    # applies via BrowserEngine.probe(). Without this, a fresh install opens
+    # with red tests the user did not cause.
+    try:
+        asyncio.run(cls.probe())
+    except TransportError as exc:
+        pytest.skip(f"{transport_name} transport unavailable here: {exc}")
+    return cls()
 
 
 def test_registered_name_matches(transport, transport_name):
