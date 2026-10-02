@@ -13,3 +13,4 @@ that was wrong is as useful as the reasoning that was right.
 | [0002](0002-truthful-outcomes.md) | Every action reports whether anything changed | Accepted |
 | [0003](0003-narrow-engine-interface.md) | A narrow action-level engine interface, not a Page object | Accepted |
 | [0004](0004-async-engine-interface.md) | The engine interface is async | Accepted |
+| [0005](0005-agent-is-a-reference-loop.md) | The agent runtime is a reference loop, not the product | Accepted |

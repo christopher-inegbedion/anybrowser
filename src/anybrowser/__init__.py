@@ -28,7 +28,26 @@ from .core import BrowserEngine, Capability, SyncEngine
 from .core.errors import AnyBrowserError
 from .core.registry import engines as engine_registry
 
-__version__ = "0.1.0"
+
+def _installed_version() -> str:
+    """The version from package metadata, so there is one source of truth.
+
+    A literal here is a second one, and the two diverge the moment a release
+    bumps `pyproject.toml` and forgets this file -- which happened: a 0.2.0
+    wheel whose CLI reported 0.1.0, caught by installing it rather than by
+    reading it. Metadata is absent when running from an uninstalled source
+    tree, and "0.0.0+unknown" is a more honest answer there than a number that
+    looks real.
+    """
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("anybrowser")
+    except PackageNotFoundError:
+        return "0.0.0+unknown"
+
+
+__version__ = _installed_version()
 
 __all__ = [
     "AnyBrowserError",

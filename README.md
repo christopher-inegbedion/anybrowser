@@ -182,7 +182,13 @@ anybrowser serve --transport unix         # a daemon owning one browser
 anybrowser run "find the pricing page"    # give an agent a goal
 ```
 
-`run` takes a provider and its constructor options, so any OpenAI-compatible
+`run` drives a **reference loop**: deliberately small, honest about what it did,
+and not where this library's value lives ([ADR-0005](docs/adr/0005-agent-is-a-reference-loop.md)).
+It has seven tools. If you need more, call the engine directly, register your own
+`Tool`, or bring your own loop and keep the browser layer — which is the part
+with the contracts.
+
+It takes a provider and its constructor options, so any OpenAI-compatible
 endpoint works — a gateway, a local vLLM, Ollama:
 
 ```bash
@@ -207,7 +213,7 @@ src/anybrowser/
   engines/       chrome, safari, playwright
   perception/    turning a page into a snapshot, engine-agnostic
   daemon/        protocol, transports, the server that owns an engine
-  agent/         planner, tools, executor, memory
+  agent/         a reference loop: planner, tools, runner (see ADR-0005)
   models/        LLM providers
 conformance/     the executable contract
 docs/            architecture, guides, ADRs
@@ -225,6 +231,7 @@ docs/            architecture, guides, ADRs
 - [Writing a model provider](docs/guides/writing-a-model-provider.md)
 - [Driving your own Chrome](docs/guides/chrome-extension.md)
 - [Driving Safari](docs/guides/safari-extension.md)
+- [The agent is a reference loop](docs/adr/0005-agent-is-a-reference-loop.md) — what `anybrowser.agent` is for, and what it is not
 - [ADRs](docs/adr/) — the decisions and what they cost
 
 ---

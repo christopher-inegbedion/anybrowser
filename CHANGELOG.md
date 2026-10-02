@@ -8,7 +8,22 @@ Pre-1.0, the interfaces in `core/engine.py`, `daemon/protocol.py` and
 `models/provider.py` may change in a minor release. Each such change gets an ADR
 and a `BREAKING:` entry here.
 
-## [Unreleased]
+## [0.2.0] - 2026-10-02
+
+Safari works. In 0.1.0 its clicks silently never fired and every action reported
+`changed=False`, which is this project's own headline principle inverted. The
+agent could not read page text at all. The CLI could not be pointed at any
+model gateway. All of that is fixed below, and the Safari engine now passes its
+contract on a real machine.
+
+### Added
+
+- [ADR-0005](docs/adr/0005-agent-is-a-reference-loop.md): the agent runtime is a
+  reference loop, not the product. It exists to show the three plugin interfaces
+  composing, and a small tool surface is correct rather than incomplete.
+  Capabilities belong to the layers that are contract-graded -- one added to the
+  loop is available only to the loop, while the same one on `BrowserEngine` is
+  available to every loop and enforced by the suite.
 
 ### Removed
 
