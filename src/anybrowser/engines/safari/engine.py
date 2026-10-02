@@ -366,39 +366,70 @@ class SafariEngine(BrowserEngine):
     # Navigation                                                          #
     # ------------------------------------------------------------------ #
 
-    async def _navigated(self, url: str) -> NavigationResult:
+    async def _navigated(self, url: str, *, previous: str | None = None) -> NavigationResult:
+        """Wait for the page to actually be somewhere else, then report where.
+
+        Taking the first non-blank URL after issuing a navigation reports the
+        page you were *leaving*: the old document is still current for a beat.
+        That is a lie about what happened, and an expensive one -- an agent told
+        it is still on the previous page navigates again, burning a step, which
+        is exactly what was observed driving Safari to Google.
+
+        So a result is accepted only when the URL either matches what was asked
+        for (a redirect to the canonical form counts) or differs from where we
+        started. ``previous`` is None where the destination is unknowable in
+        advance, as with history traversal.
+        """
         self._generation += 1
+        want = url.rstrip("/") if url else ""
         for _ in range(40):
             await asyncio.sleep(0.1)
             with contextlib.suppress(Exception):
                 current = await self.url()
-                if current and current != "about:blank":
+                if not current or current == "about:blank":
+                    continue
+                if want and current.rstrip("/") == want:
+                    return NavigationResult(url=current)
+                if previous is None or current != previous:
                     return NavigationResult(url=current)
         return NavigationResult(url=url)
 
     async def navigate(self, url: str, *, timeout: float = 30.0) -> NavigationResult:
+        previous = ""
+        with contextlib.suppress(Exception):
+            previous = await self.url()
         await self._require_channel().request(
             "navigate", {"tabId": self._tab_id, "url": url}, timeout=timeout
         )
-        return await self._navigated(url)
+        return await self._navigated(url, previous=previous)
 
     async def reload(self, *, timeout: float = 30.0) -> NavigationResult:
+        here = ""
+        with contextlib.suppress(Exception):
+            here = await self.url()
         await self._require_bridge().applescript(
             'tell application "Safari" to do JavaScript "location.reload()" in front document'
         )
-        return await self._navigated(await self.url())
+        # A reload lands on the same URL, so there is nothing to wait to change.
+        return await self._navigated(here)
 
     async def go_back(self, *, timeout: float = 30.0) -> NavigationResult:
+        previous = ""
+        with contextlib.suppress(Exception):
+            previous = await self.url()
         await self._require_bridge().applescript(
             'tell application "Safari" to do JavaScript "history.back()" in front document'
         )
-        return await self._navigated("")
+        return await self._navigated("", previous=previous)
 
     async def go_forward(self, *, timeout: float = 30.0) -> NavigationResult:
+        previous = ""
+        with contextlib.suppress(Exception):
+            previous = await self.url()
         await self._require_bridge().applescript(
             'tell application "Safari" to do JavaScript "history.forward()" in front document'
         )
-        return await self._navigated("")
+        return await self._navigated("", previous=previous)
 
     # ------------------------------------------------------------------ #
     # Input                                                               #
