@@ -12,6 +12,8 @@ and a `BREAKING:` entry here.
 
 ### Fixed
 
+- Run `examples/custom_engine.py` to see a toy-engine trace, including a deliberate no-op, instead of silently exiting.
+
 - Safari: **`AXManualAccessibility` was never set**, so WebKit handed out an
   accessibility tree that could be read but not acted on. Roles, titles and
   frames resolved, `AXPress` appeared in the element's actions, performing it
