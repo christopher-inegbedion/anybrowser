@@ -27,7 +27,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field
 
 from ..core.engine import BrowserEngine
@@ -171,6 +171,12 @@ class AgentRunner:
             # window, so what this measures is simply "nothing has happened for
             # N actions", whatever shape they took.
             signature = (decision.tool, repr(sorted(decision.arguments.items())))
+            # Reads are counted here deliberately, even though they are not
+            # marked [no effect] in history. See
+            # test_alternating_actions_that_change_nothing_still_count_as_stuck:
+            # the commonest loop is act, look, act, look, and exempting the look
+            # lets a run alternate its way through the whole budget. Nothing
+            # changed, whatever shape the actions took.
             if step_result.changed:
                 recent.clear()
             else:
@@ -241,16 +247,22 @@ class AgentRunner:
             return ToolResult.failure(f"{decision.tool} raised: {exc}")
 
 
-def render_history(steps: Sequence[Step], *, limit: int = 20) -> str:
+def render_history(steps: Sequence[Step], *, limit: int = 20, reads: Collection[str] = ()) -> str:
     """Format history for a prompt.
 
     The ``[no effect]`` marker is the whole point of this function. Without it
     every line reads as progress and the model has no way to tell a working
     action from one that has been failing silently for five turns.
+
+    ``reads`` names the tools that are not supposed to change anything, so they
+    are not marked as though they tried and failed. Marking them was actively
+    harmful: the prompt tells the model that ``[no effect]`` means doing it again
+    is pointless, and in the same breath recommends ``look`` as the remedy -- so
+    the history taught it that the recommended remedy never works.
     """
     lines: list[str] = []
     for index, step in enumerate(steps[-limit:], start=max(1, len(steps) - limit + 1)):
-        marker = "" if step.result.changed else "  [no effect]"
+        marker = "" if step.result.changed or step.decision.tool in reads else "  [no effect]"
         if not step.result.ok:
             marker = "  [failed]"
         arguments = ", ".join(f"{k}={v!r}" for k, v in step.decision.arguments.items())

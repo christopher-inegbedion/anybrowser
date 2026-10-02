@@ -222,8 +222,11 @@ async def cmd_run(args: argparse.Namespace) -> int:
         runner = AgentRunner(engine, planner, config=config)
         result = await runner.run(args.goal)
 
+    # A read is not a failed write; see render_history in agent/runner.py.
+    reads = {tool.name for tool in runner.tools if not tool.mutating}
     for index, step in enumerate(result.steps, start=1):
-        marker = "" if step.result.changed else "  [no effect]"
+        changed_or_read = step.result.changed or step.decision.tool in reads
+        marker = "" if changed_or_read else "  [no effect]"
         if not step.result.ok:
             marker = "  [failed]"
         print(f"{index}. {step.decision.tool}{marker}")

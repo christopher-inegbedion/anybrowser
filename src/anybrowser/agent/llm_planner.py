@@ -135,7 +135,12 @@ class LLMPlanner(Planner):
             self._render_page(observation),
         ]
         if observation.history:
-            parts += ["", "WHAT YOU HAVE DONE:", render_history(observation.history)]
+            reads = {tool.name for tool in tools if not tool.mutating}
+            parts += [
+                "",
+                "WHAT YOU HAVE DONE:",
+                render_history(observation.history, reads=reads),
+            ]
         if observation.notes:
             parts += ["", "NOTES:", *(f"- {n}" for n in observation.notes)]
         parts += ["", f"Step {observation.step_index + 1}. Choose one action."]
