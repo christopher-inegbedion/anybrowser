@@ -8,6 +8,26 @@ Pre-1.0, the interfaces in `core/engine.py`, `daemon/protocol.py` and
 `models/provider.py` may change in a minor release. Each such change gets an ADR
 and a `BREAKING:` entry here.
 
+## [Unreleased]
+
+### Added
+
+- `BrowserEngine.await_change(timeout, poll, since)` and
+  `BrowserEngine.page_signature()`, neither abstract
+  ([ADR-0006](docs/adr/0006-waiting-is-an-engine-primitive.md)). Waiting for an
+  in-flight result to land is the one thing an agent cannot otherwise do, and it
+  belongs to browsers rather than to one loop. `page_signature` promotes what
+  all three engines already computed privately -- it is what `changed` has
+  always been built on -- with a default derived from `snapshot()` so no backend
+  has to implement either one. The daemon forwards it, so a `remote` engine
+  waits too.
+- Three conformance tests for it, including one that grades the fingerprint
+  directly: a signature that moves for an element change but not for a
+  text-only change fails, because a wait built on it returns early exactly when
+  a result lands as text. Nothing tested that before.
+- `pages/async.html`, a fixture whose text changes 700ms after a click, adding
+  and removing no elements.
+
 ## [0.2.0] - 2026-10-02
 
 Safari works. In 0.1.0 its clicks silently never fired and every action reported

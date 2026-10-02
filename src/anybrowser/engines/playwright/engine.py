@@ -191,7 +191,8 @@ class PlaywrightEngine(BrowserEngine):
         except Exception as exc:
             raise EvaluationError(str(exc)) from exc
 
-    async def _page_signature(self) -> str:
+    async def page_signature(self) -> str:
+        """See :meth:`BrowserEngine.page_signature`."""
         return str(await self._eval(READ_JS, {"op": "signature"}))
 
     # ------------------------------------------------------------------ #
@@ -342,7 +343,7 @@ class PlaywrightEngine(BrowserEngine):
     ) -> ActionOutcome:
         page = self._require_page()
         point = await self._point_for(target)
-        before = await self._page_signature()
+        before = await self.page_signature()
         # Playwright's mouse API takes no modifiers, so hold them on the keyboard
         # around the click. Doing it here keeps the modifier contract identical
         # across backends that do accept them natively.
@@ -387,7 +388,7 @@ class PlaywrightEngine(BrowserEngine):
     ) -> ActionOutcome:
         page = self._require_page()
         combo = "+".join([*(m.value.capitalize() for m in modifiers), key])
-        before = await self._page_signature()
+        before = await self.page_signature()
         for _ in range(max(1, repeat)):
             await page.keyboard.press(combo)
         return await self._settle(before, f"pressed {combo}", f"{combo} changed nothing")
@@ -427,7 +428,7 @@ class PlaywrightEngine(BrowserEngine):
     async def hover(self, target: Element | Point) -> ActionOutcome:
         page = self._require_page()
         point = await self._point_for(target)
-        before = await self._page_signature()
+        before = await self.page_signature()
         await page.mouse.move(point.x, point.y)
         return await self._settle(before, "hovered", "hover changed nothing")
 
@@ -441,7 +442,7 @@ class PlaywrightEngine(BrowserEngine):
         if len(path) < 2:
             return ActionOutcome.failure("a drag needs at least two points")
         page = self._require_page()
-        before = await self._page_signature()
+        before = await self.page_signature()
         await page.mouse.move(path[0].x, path[0].y)
         await page.mouse.down(button=button.value)
         # Playwright keeps the pressed-button state on move for us; a hand-rolled
@@ -592,7 +593,7 @@ class PlaywrightEngine(BrowserEngine):
         for _ in range(6):
             await asyncio.sleep(0.05)
             try:
-                after = await self._page_signature()
+                after = await self.page_signature()
             except EvaluationError:
                 # A navigation tore the context down -- that is a change.
                 return ActionOutcome(ok=True, changed=True, detail="page navigated")

@@ -14,3 +14,4 @@ that was wrong is as useful as the reasoning that was right.
 | [0003](0003-narrow-engine-interface.md) | A narrow action-level engine interface, not a Page object | Accepted |
 | [0004](0004-async-engine-interface.md) | The engine interface is async | Accepted |
 | [0005](0005-agent-is-a-reference-loop.md) | The agent runtime is a reference loop, not the product | Accepted |
+| [0006](0006-waiting-is-an-engine-primitive.md) | Waiting for the page is an engine primitive, not an agent tool | Accepted |

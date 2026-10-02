@@ -39,6 +39,8 @@ above route accordingly -- see ``docs/architecture/capabilities.md``.
 from __future__ import annotations
 
 import abc
+import asyncio
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
@@ -224,6 +226,78 @@ class BrowserEngine(abc.ABC):
 
     @abc.abstractmethod
     async def viewport(self) -> Viewport: ...
+
+    async def page_signature(self) -> str:
+        """A cheap fingerprint of the page, for deciding whether anything changed.
+
+        Every engine already computed this privately, because it is what
+        :doc:`ADR-0002 </adr/0002-truthful-outcomes>` is built on: an action
+        reports ``changed`` by comparing one of these across the call. Promoting
+        it to the interface is what makes :meth:`await_change` work for every
+        backend without each one reimplementing waiting.
+
+        Must be sensitive to *content*, not just structure: the page text, the
+        URL and the focused field. An element-only fingerprint misses a result
+        landing as text, which is the single most common thing worth waiting
+        for. The shared ``read.js`` implements exactly this, and any engine
+        using :mod:`anybrowser.perception` gets it for free.
+
+        Cheap enough to poll a few times a second, and deliberately not a pixel
+        hash -- those change with a caret blink and an animation, which makes
+        every poll look like progress.
+
+        .. warning::
+           Not the same as :attr:`~anybrowser.core.types.Snapshot.signature`,
+           which is element-derived and does not move when only text changes.
+           That one is for spotting a changed element set; this one is for
+           "did anything happen".
+
+        Not abstract, deliberately. Every engine here overrides it with a single
+        cheap page evaluation, but making it required would break every existing
+        backend -- including third-party ones -- for the sake of a convenience
+        built on top of it. The default below derives the same thing from
+        :meth:`snapshot`, which every engine must implement anyway. It is
+        correct and slower; an override is an optimisation, not a duty.
+        """
+        page = await self.snapshot(include_text=True)
+        text = page.text or ""
+        return f"{page.url}|{len(text)}|{text[:1500]}"
+
+    async def await_change(
+        self, *, timeout: float = 10.0, poll: float = 0.25, since: str | None = None
+    ) -> ActionOutcome:
+        """Wait until the page changes, and report honestly if it does not.
+
+        For the thing an agent cannot otherwise do: a request is in flight, a
+        spinner is up, results have not landed. Without this the only move is to
+        act again and hope, which is how a run burns its budget on a page that
+        was about to be ready.
+
+        ``since`` is a signature to compare against, so a caller can act and
+        then wait without racing its own change. Omitted, the page as it is now
+        becomes the baseline.
+
+        A timeout is *not* an error. Nothing happened, which is an outcome worth
+        reporting truthfully (ADR-0002) -- an exception here would push callers
+        into treating "not yet" as "broken".
+
+        The default implementation polls :meth:`page_signature`, so no backend
+        has to implement it. Override where the protocol offers something
+        better, such as a CDP lifecycle event.
+        """
+        baseline = since if since is not None else await self.page_signature()
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            await asyncio.sleep(poll)
+            current = await self.page_signature()
+            if current != baseline:
+                return ActionOutcome(
+                    ok=True, changed=True, detail="the page changed", data={"signature": current}
+                )
+        return ActionOutcome.no_change(
+            f"the page did not change within {timeout:g}s",
+            data={"signature": baseline},
+        )
 
     @abc.abstractmethod
     async def snapshot(self, *, include_text: bool = True) -> Snapshot:
