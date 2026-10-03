@@ -29,6 +29,7 @@ __all__ = [
     "TypeTool",
     "UploadTool",
     "WaitTool",
+    "canonical_key",
     "default_tools",
 ]
 
@@ -125,7 +126,53 @@ class PressKeyTool(_EngineTool):
     }
 
     async def _run(self, ctx: ToolContext, key: str = "", **_: Any) -> ToolResult:
+        key = canonical_key(key)
         return ToolResult.of(await ctx.engine.press_key(key), f"pressed {key}")
+
+
+#: What models say, mapped to the DOM key names engines take. The engine
+#: contract is exact ("Enter", "ArrowDown"), which is right for code; a model
+#: writes "enter", "return" or "esc", and qwen2.5vl's search failed on
+#: "unsupported key (key='enter')" with the right idea and the wrong case.
+_KEY_NAMES = {
+    name.lower(): name
+    for name in (
+        "Enter",
+        "Tab",
+        "Backspace",
+        "Escape",
+        "Delete",
+        "ArrowLeft",
+        "ArrowUp",
+        "ArrowRight",
+        "ArrowDown",
+        "Home",
+        "End",
+        "PageUp",
+        "PageDown",
+    )
+}
+_KEY_ALIASES = {
+    "return": "Enter",
+    "esc": "Escape",
+    "del": "Delete",
+    "up": "ArrowUp",
+    "down": "ArrowDown",
+    "left": "ArrowLeft",
+    "right": "ArrowRight",
+    "space": " ",
+    "spacebar": " ",
+}
+
+
+def canonical_key(key: str) -> str:
+    """A model's key name as the DOM name, case-insensitively. A single
+    character is left alone: "a" and "A" are different keys."""
+    stripped = key.strip()
+    if len(stripped) <= 1:
+        return key
+    lowered = stripped.lower().replace(" ", "").replace("_", "")
+    return _KEY_NAMES.get(lowered) or _KEY_ALIASES.get(lowered) or stripped
 
 
 class ScrollTool(_EngineTool):

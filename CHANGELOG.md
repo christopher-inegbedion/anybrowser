@@ -55,6 +55,17 @@ and a `BREAKING:` entry here.
 - `python -m anybrowser_bench.grounding`, which measures whether a model can
   point at a named target on a screenshot, scored against the real boxes.
   qwen2.5vl:3b: 29/34 through the provider, 10/10 on canvas.
+- Constrained replies
+  ([ADR-0009](docs/adr/0009-constrained-replies-are-a-provider-capability.md)):
+  `ModelProvider.structured_output(schema)`, which is not abstract and defaults
+  to `None`. The OpenAI-compatible provider implements it with `response_format`.
+  With `constrained=True` the planner sends one flat schema per step (narrative,
+  tool, arguments, answer, with "done" as a tool), narrowed to the page: handles
+  must be in the current listing, and vision coordinates must be inside the
+  screenshot. Use `--constrained` in the bench.
+- Key names from models are normalised in `press_key`: "enter", "RETURN" and
+  "esc" become "Enter" and "Escape". qwen2.5vl's search failed on
+  "unsupported key (key='enter')".
 - `Attempt.trace`, which records every step: tool, arguments, narrative, and
   whether the engine said it changed anything.
 

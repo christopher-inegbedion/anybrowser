@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ..core.errors import ModelOutputError
@@ -69,6 +69,14 @@ not what the action is.
 """
 
 
+#: Appended to the request when the provider enforces the schema, so the prompt
+#: does not describe one reply shape while the decoder enforces another.
+_CONSTRAINED_REPLY = (
+    'Reply format: {"narrative", "tool", "arguments", "answer"}. To act, set "tool" '
+    'and its "arguments", and leave "answer" empty. Only when the goal is achieved, '
+    'set "tool" to "done" and put what you found or did in "answer".'
+)
+
 #: Stop reasons meaning "hit the token limit": OpenAI-compatible APIs say
 #: ``length``, Anthropic says ``max_tokens``.
 _LENGTH_STOPS = frozenset({"length", "max_tokens"})
@@ -89,8 +97,12 @@ class LLMPlanner(Planner):
         temperature: float = 0.0,
         max_tokens: int = 2048,
         system_prompt: str = SYSTEM_PROMPT,
+        constrained: bool = False,
     ) -> None:
+        """``constrained`` asks the provider to enforce the reply's shape while
+        decoding (ADR-0009). A provider that cannot is prompted as usual."""
         self._provider = provider
+        self._constrained = constrained
         self._model = model
         self._max_elements = max_elements
         self._max_text = max_text
@@ -199,15 +211,93 @@ class LLMPlanner(Planner):
 
     async def decide(self, observation: Observation, tools: Sequence[Tool]) -> Decision:
         messages = self._build_messages(observation, tools)
+        options: Mapping[str, Any] = {}
+        if self._constrained:
+            options = (
+                self._provider.structured_output(self.decision_schema(observation, tools)) or {}
+            )
+            if options:
+                messages[-1] = Message(
+                    role=messages[-1].role,
+                    text=messages[-1].text + "\n\n" + _CONSTRAINED_REPLY,
+                    images=messages[-1].images,
+                )
         completion = await self._provider.complete(
             messages,
             model=self._model,
             temperature=self._temperature,
             max_tokens=self._max_tokens,
+            **options,
         )
         self.total_cost_usd += completion.usage.cost_usd
         self.total_tokens += completion.usage.input_tokens + completion.usage.output_tokens
         return self._parse(completion.text, tools, stop_reason=completion.stop_reason)
+
+    # ------------------------------------------------------------------ #
+    # Constrained replies (ADR-0009)                                      #
+    # ------------------------------------------------------------------ #
+
+    def decision_schema(self, observation: Observation, tools: Sequence[Tool]) -> dict[str, Any]:
+        """One flat object: narrative, tool, arguments, answer.
+
+        Flat, with "done" as just another tool, rather than a choice between an
+        action shape and a finish shape. Ollama does not keep key order, so a
+        model that happened to start with "answer" locked itself into the
+        finish branch and wrote its plan as the answer. A flat schema has no
+        branch to fall into.
+
+        Every argument is narrowed to what the page allows, via
+        :meth:`_constrain`; a tool whose required argument cannot be satisfied
+        on this page -- a click by handle on a page with no elements -- is left
+        out of the enum entirely.
+        """
+        arguments: dict[str, Any] = {}
+        names: list[str] = []
+        for tool in tools:
+            params = dict(tool.parameters)
+            required = set(params.get("required", ()))
+            usable = True
+            specs: dict[str, Any] = {}
+            for name, raw in dict(params.get("properties", {})).items():
+                spec = {k: v for k, v in dict(raw).items() if k not in ("default", "description")}
+                narrowed = self._constrain(name, spec, observation)
+                if narrowed is None:
+                    usable = usable and name not in required
+                    continue
+                specs[name] = narrowed
+            if usable:
+                names.append(tool.name)
+                for name, spec in specs.items():
+                    arguments.setdefault(name, spec)
+        return {
+            "type": "object",
+            "properties": {
+                "narrative": {"type": "string", "maxLength": 300},
+                "tool": {"type": "string", "enum": [*names, "done"]},
+                "arguments": {
+                    "type": "object",
+                    "properties": arguments,
+                    "additionalProperties": False,
+                },
+                "answer": {"type": "string", "maxLength": 500},
+            },
+            "required": ["narrative", "tool", "arguments", "answer"],
+            "additionalProperties": False,
+        }
+
+    def _constrain(
+        self, name: str, spec: dict[str, Any], observation: Observation
+    ) -> dict[str, Any] | None:
+        """Narrow one argument to this page, or None if no value is valid.
+
+        A handle can only be one in the current listing, so a model cannot
+        invent one -- qwen3:4b-instruct "clicked" 13:12 on a page with no
+        elements at all.
+        """
+        if name == "handle":
+            handles = [e.handle for e in observation.snapshot.elements[: self._max_elements]]
+            return {**spec, "enum": handles} if handles else None
+        return spec
 
     def _parse(self, text: str, tools: Sequence[Tool], *, stop_reason: str = "") -> Decision:
         payload = _extract_json(text)
@@ -235,7 +325,7 @@ class LLMPlanner(Planner):
             raise ModelOutputError(f"planner did not return JSON: {text[:300]!r}")
 
         narrative = str(payload.get("narrative") or "").strip()
-        if payload.get("done"):
+        if payload.get("done") or str(payload.get("tool") or "").strip() == "done":
             return Decision(
                 tool="",
                 arguments={},
@@ -259,6 +349,11 @@ class LLMPlanner(Planner):
         arguments = payload.get("arguments")
         if not isinstance(arguments, dict):
             arguments = {}
+        # A constrained reply's arguments object spans every tool's parameters;
+        # keep only the chosen tool's, so history shows what was actually used.
+        accepted = dict(next(t for t in tools if t.name == tool).parameters).get("properties")
+        if accepted:
+            arguments = {k: v for k, v in arguments.items() if k in accepted}
         return Decision(
             tool=tool,
             arguments=arguments,

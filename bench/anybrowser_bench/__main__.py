@@ -76,6 +76,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Image-only agent: decides from the screenshot, clicks by coordinates.",
     )
     parser.add_argument(
+        "--constrained",
+        action="store_true",
+        help="Have the provider enforce the reply's JSON shape while decoding.",
+    )
+    parser.add_argument(
         "--max-tokens",
         type=int,
         default=2048,
@@ -92,6 +97,7 @@ def main(argv: list[str] | None = None) -> int:
         screenshots=args.screenshots,
         max_tokens=args.max_tokens,
         vision=args.vision,
+        constrained=args.constrained,
     )
     tasks = [task(t) for t in args.task] or list(ALL_TASKS)
     seeds = range(args.seed_offset, args.seed_offset + args.seeds)

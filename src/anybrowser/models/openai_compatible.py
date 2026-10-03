@@ -96,6 +96,17 @@ class OpenAICompatibleProvider(ModelProvider):
         self._image_models = frozenset(image_models or ())
         self.last_usage = Usage()
 
+    def structured_output(self, schema: Mapping[str, Any]) -> Mapping[str, Any] | None:
+        """OpenAI's ``response_format``, which Ollama, vLLM and OpenRouter also
+        accept. Not ``strict``: OpenAI's strict mode requires every property to
+        be required, and an action's optional arguments are not."""
+        return {
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "decision", "schema": dict(schema)},
+            }
+        }
+
     def supports_images(self, model: str) -> bool:
         if model in self._image_models:
             return True

@@ -120,6 +120,20 @@ class ModelProvider(abc.ABC):
         )
         yield completion.text
 
+    def structured_output(self, schema: Mapping[str, Any]) -> Mapping[str, Any] | None:
+        """Request options that make the model's reply conform to ``schema``.
+
+        ``None`` -- the default -- means this provider cannot, and the caller
+        should prompt for the shape and parse leniently instead. A provider
+        that can returns the options to pass to :meth:`complete`, which then
+        enforces the schema while decoding: the model cannot emit two actions
+        at once, a coordinate as a list, or a tool that does not exist.
+
+        Not abstract, so no existing provider breaks (the ADR-0006 rule for
+        anything added to a published interface). See ADR-0009.
+        """
+        return None
+
     def supports_images(self, model: str) -> bool:
         """Whether ``model`` accepts image parts.
 

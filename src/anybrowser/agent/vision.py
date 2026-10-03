@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import io
 from collections.abc import Sequence
+from typing import Any
 
 from ..core.errors import EngineError
 from ..core.types import Screenshot, Viewport
@@ -82,6 +83,7 @@ class VisionPlanner(LLMPlanner):
         temperature: float = 0.0,
         max_tokens: int = 2048,
         system_prompt: str = VISION_SYSTEM_PROMPT,
+        constrained: bool = False,
     ) -> None:
         super().__init__(
             provider,
@@ -89,7 +91,19 @@ class VisionPlanner(LLMPlanner):
             temperature=temperature,
             max_tokens=max_tokens,
             system_prompt=system_prompt,
+            constrained=constrained,
         )
+
+    def _constrain(
+        self, name: str, spec: dict[str, Any], observation: Observation
+    ) -> dict[str, Any] | None:
+        """Coordinates are integers inside the screenshot. qwen2.5vl once sent
+        ``x: [999, 284]`` -- a point packed into one field -- three times running."""
+        view = observation.snapshot.viewport
+        if name in ("x", "y"):
+            limit = (view.width if name == "x" else view.height) - 1
+            return {"type": "integer", "minimum": 0, "maximum": int(limit)}
+        return super()._constrain(name, spec, observation)
 
     def _build_messages(self, observation: Observation, tools: Sequence[Tool]) -> list[Message]:
         if observation.screenshot is None:

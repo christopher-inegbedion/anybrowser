@@ -212,6 +212,7 @@ def llm_agent(
     screenshots: bool = False,
     max_tokens: int = 2048,
     vision: bool = False,
+    constrained: bool = False,
 ) -> Agent:
     """The reference agent: :class:`AgentRunner` with an :class:`LLMPlanner`.
 
@@ -222,17 +223,22 @@ def llm_agent(
     above the default, or it can spend the budget thinking and never reply.
 
     ``vision`` runs the image-only agent instead: :class:`VisionPlanner` with
-    coordinate tools, deciding from the screenshot alone.
+    coordinate tools, deciding from the screenshot alone. ``constrained`` has
+    the provider enforce the reply's shape (ADR-0009).
     """
     from anybrowser.agent import AgentRunner, LLMPlanner, RunConfig, VisionPlanner, vision_tools
 
     async def run(engine: BrowserEngine, goal: str) -> RunResult:
         if vision:
-            planner: LLMPlanner = VisionPlanner(provider, model=model, max_tokens=max_tokens)
+            planner: LLMPlanner = VisionPlanner(
+                provider, model=model, max_tokens=max_tokens, constrained=constrained
+            )
             config = RunConfig(max_steps=max_steps, include_screenshot=True)
             runner = AgentRunner(engine, planner, tools=vision_tools(), config=config)
         else:
-            planner = LLMPlanner(provider, model=model, max_tokens=max_tokens)
+            planner = LLMPlanner(
+                provider, model=model, max_tokens=max_tokens, constrained=constrained
+            )
             config = RunConfig(max_steps=max_steps, include_screenshot=screenshots)
             runner = AgentRunner(engine, planner, config=config)
         return await runner.run(goal)

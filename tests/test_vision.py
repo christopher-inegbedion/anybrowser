@@ -116,3 +116,106 @@ async def test_typing_without_a_point_types_into_the_focused_field():
     await PointTypeTool().run(ToolContext(engine=engine), text="hi")  # type: ignore[arg-type]
     await PointTypeTool().run(ToolContext(engine=engine), text="yo", x=5, y=6)  # type: ignore[arg-type]
     assert engine.typed == [("hi", None), ("yo", Point(5, 6))]
+
+
+# -- constrained replies (ADR-0009) ----------------------------------------- #
+
+
+def test_the_vision_schema_bounds_coordinates_to_the_screenshot():
+    planner = VisionPlanner(object(), model="m")  # type: ignore[arg-type]
+    schema = planner.decision_schema(_observation(None), vision_tools())
+    args = schema["properties"]["arguments"]["properties"]
+    assert args["x"] == {"type": "integer", "minimum": 0, "maximum": 1279}
+    assert args["y"] == {"type": "integer", "minimum": 0, "maximum": 799}
+    assert "done" in schema["properties"]["tool"]["enum"]
+    assert "handle" not in args
+
+
+def test_the_handle_schema_offers_only_handles_on_the_page():
+    from anybrowser.agent import LLMPlanner, default_tools
+
+    planner = LLMPlanner(object(), model="m")  # type: ignore[arg-type]
+    observation = _observation(None)
+    schema = planner.decision_schema(observation, default_tools())
+    assert schema["properties"]["arguments"]["properties"]["handle"]["enum"] == ["1:0"]
+
+    empty = Observation(
+        goal="g",
+        snapshot=Snapshot(url="u", title="t", viewport=Viewport(1280, 800)),
+        screenshot=None,
+        history=(),
+        notes=(),
+        step_index=0,
+    )
+    tools = planner.decision_schema(empty, default_tools())["properties"]["tool"]["enum"]
+    assert "click" not in tools, "a click by handle is impossible on a page with no elements"
+    assert {"scroll", "wait", "done"} <= set(tools)
+
+
+def test_tool_done_in_a_flat_reply_finishes_the_run():
+    from anybrowser.agent import LLMPlanner
+
+    planner = LLMPlanner(object(), model="m")  # type: ignore[arg-type]
+    reply = '{"narrative": "it says so", "tool": "done", "arguments": {}, "answer": "WP-9110"}'
+    decision = planner._parse(reply, vision_tools())
+    assert decision.done and decision.answer == "WP-9110"
+
+
+def test_a_flat_reply_keeps_only_the_chosen_tools_arguments():
+    from anybrowser.agent import LLMPlanner
+
+    planner = LLMPlanner(object(), model="m")  # type: ignore[arg-type]
+    reply = (
+        '{"narrative": "n", "tool": "click", "arguments": '
+        '{"x": 5, "y": 6, "text": "", "key": "", "seconds": 0}, "answer": ""}'
+    )
+    assert dict(planner._parse(reply, vision_tools()).arguments) == {"x": 5, "y": 6}
+
+
+async def test_a_constrained_planner_sends_the_schema_and_says_how_to_finish():
+    from anybrowser.models.openai_compatible import OpenAICompatibleProvider
+    from anybrowser.models.provider import Completion
+
+    sent: dict[str, object] = {}
+
+    class _Provider(OpenAICompatibleProvider):
+        async def complete(self, messages, **options):
+            sent.update(options, text=messages[-1].text)
+            return Completion(
+                text='{"narrative": "n", "tool": "wait", "arguments": {}, "answer": ""}'
+            )
+
+    planner = VisionPlanner(_Provider(api_key="x"), model="m", constrained=True)
+    shot = Screenshot(data=_png(1280, 800), width=1280, height=800)
+    await planner.decide(_observation(shot), vision_tools())
+    fmt = sent["response_format"]
+    assert fmt["type"] == "json_schema"
+    assert (
+        fmt["json_schema"]["schema"]["properties"]["arguments"]["properties"]["x"]["maximum"]
+        == 1279
+    )
+    assert '"done"' in str(sent["text"])
+
+
+def test_a_provider_that_cannot_constrain_says_so():
+    from anybrowser.models.anthropic import AnthropicProvider
+
+    assert AnthropicProvider(api_key="x").structured_output({"type": "object"}) is None
+
+
+@pytest.mark.parametrize(
+    ("said", "key"),
+    [
+        ("enter", "Enter"),
+        ("RETURN", "Enter"),
+        ("esc", "Escape"),
+        ("arrow_down", "ArrowDown"),
+        ("a", "a"),
+        ("A", "A"),
+        ("F5", "F5"),
+    ],
+)
+def test_key_names_from_a_model_become_dom_key_names(said, key):
+    from anybrowser.agent.tools import canonical_key
+
+    assert canonical_key(said) == key

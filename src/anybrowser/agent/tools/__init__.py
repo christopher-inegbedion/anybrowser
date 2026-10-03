@@ -10,6 +10,7 @@ from .browser import (
     TypeTool,
     UploadTool,
     WaitTool,
+    canonical_key,
     default_tools,
 )
 from .vision import VISION_TOOLS, PointClickTool, PointScrollTool, PointTypeTool, vision_tools
@@ -28,6 +29,7 @@ __all__ = [
     "TypeTool",
     "UploadTool",
     "WaitTool",
+    "canonical_key",
     "default_tools",
     "vision_tools",
 ]
