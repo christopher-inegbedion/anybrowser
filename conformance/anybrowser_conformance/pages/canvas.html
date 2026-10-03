@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>AnyBrowser canvas fixture</title>
+<!--
+  For change detection on a page that is only pixels.
+
+  The canvas has no text and adds no elements when clicked; it only redraws.
+  A fingerprint built from the DOM sees nothing happen, and an engine that
+  relies on one reports a click that worked as "hit nothing" -- which tells a
+  vision agent to stop doing the right thing.
+
+  The button is drawn at a fixed place so a test can click it by coordinate:
+  canvas at (0,0), button at (100,100)-(300,160), so its centre is (200,130).
+-->
+<style>body{margin:0}canvas{display:block}</style>
+<canvas id="c" width="400" height="300"></canvas>
+<script>
+  const cv = document.getElementById('c'), g = cv.getContext('2d');
+  function draw(title, color) {
+    g.fillStyle = '#1a202c'; g.fillRect(0, 0, 400, 300);
+    g.fillStyle = '#fff'; g.font = 'bold 28px sans-serif'; g.fillText(title, 20, 50);
+    g.fillStyle = color; g.fillRect(100, 100, 200, 60);
+  }
+  draw('Menu', '#2b6cb0');
+  cv.addEventListener('click', (e) => {
+    const x = e.offsetX, y = e.offsetY;
+    if (x >= 100 && x <= 300 && y >= 100 && y <= 160) draw('Opening...', '#2f855a');
+  });
+</script>

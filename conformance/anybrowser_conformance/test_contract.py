@@ -240,6 +240,27 @@ def test_page_signature_moves_with_text_not_just_elements(engine, run, base_url)
     assert before != after, "the signature ignored a text-only change"
 
 
+def test_a_canvas_that_redraws_is_a_change(engine, run, base_url):
+    """A click that redraws a canvas changed the page, and must say so.
+
+    The canvas adds no elements and no text. Before canvases were
+    fingerprinted, a working click on a canvas menu came back "hit nothing",
+    and a vision agent's history then marked the right action [no effect].
+    """
+    run(engine.navigate(f"{base_url}/canvas.html"))
+    outcome = run(engine.click(Point(200, 130)))
+    assert outcome.changed, "a click that redrew the canvas was reported as no change"
+
+
+def test_a_canvas_that_does_not_change_is_not_a_change(engine, run, base_url):
+    """The other half: fingerprinting pixels must not make a still canvas look
+    busy, or every wait on a canvas page returns at once and every click on
+    empty canvas reads as progress."""
+    run(engine.navigate(f"{base_url}/canvas.html"))
+    assert not run(engine.await_change(timeout=1.0, poll=0.1)).changed
+    assert not run(engine.click(Point(380, 280))).changed, "a click on nothing changed the page"
+
+
 def test_scroll_moves_and_reports_it(engine, run, base_url):
     run(engine.navigate(f"{base_url}/index.html"))
     before = run(engine.viewport()).scroll_y

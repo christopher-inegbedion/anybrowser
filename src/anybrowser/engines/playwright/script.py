@@ -100,6 +100,44 @@ READ_JS = r"""
   const store = (window.__anybrowser = window.__anybrowser || { nodes: [] });
   const node = (i) => store.nodes[i] || null;
 
+  // A canvas is pixels and nothing else, so a fingerprint built from text and
+  // focus cannot see it change: a canvas menu that redrew on click reported
+  // "click hit nothing". This is the one place pixels are fingerprinted, and
+  // coarsely -- the largest two canvases, shrunk to 48x30, four bits a channel --
+  // so a redrawn screen moves it and a cursor blink does not. A canvas that
+  // animates continuously will read as always changing; that is the honest
+  // answer for such a page, and the cost of seeing canvases at all. A tainted
+  // (cross-origin) canvas cannot be read and contributes nothing.
+  const canvasPrint = () => {
+    let out = '';
+    try {
+      const canvases = Array.from(document.querySelectorAll('canvas'))
+        .filter((c) => c.width * c.height > 0)
+        .sort((a, b) => b.width * b.height - a.width * a.height)
+        .slice(0, 2);
+      if (!canvases.length) return '';
+      const thumb = document.createElement('canvas');
+      thumb.width = 48;
+      thumb.height = 30;
+      const g = thumb.getContext('2d', { willReadFrequently: true });
+      for (const c of canvases) {
+        try {
+          g.clearRect(0, 0, 48, 30);
+          g.drawImage(c, 0, 0, 48, 30);
+          const d = g.getImageData(0, 0, 48, 30).data;
+          let h = 0;
+          for (let i = 0; i < d.length; i += 4) {
+            h = (Math.imul(h, 31) + (((d[i] >> 4) << 8) | ((d[i + 1] >> 4) << 4) | (d[i + 2] >> 4))) | 0;
+          }
+          out += h.toString(36) + ',';
+        } catch (_) {
+          out += 'x,';
+        }
+      }
+    } catch (_) {}
+    return out;
+  };
+
   switch (request.op) {
     case 'viewport':
       return {
@@ -155,7 +193,7 @@ READ_JS = r"""
       const focus = document.activeElement
         ? document.activeElement.tagName + (document.activeElement.value ?? '')
         : '';
-      return `${document.location.href}|${text.length}|${text.slice(0, 1500)}|${focus}`;
+      return `${document.location.href}|${text.length}|${text.slice(0, 1500)}|${focus}|${canvasPrint()}`;
     }
 
     default:
