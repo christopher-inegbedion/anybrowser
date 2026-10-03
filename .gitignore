@@ -17,3 +17,6 @@ htmlcov/
 *.log
 test-results/
 node_modules/
+
+# Self-improvement runs: recordings, datasets, adapters (anybrowser_bench.improve)
+runs/

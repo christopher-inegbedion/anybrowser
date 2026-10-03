@@ -71,6 +71,14 @@ and a `BREAKING:` entry here.
   success, and within them only steps the engine said changed the page, plus
   the final "done", so the model is not trained on the repeated no-effect
   clicks that sank the baseline. `--temperature` makes repeated attempts differ.
+- `python -m anybrowser_bench.improve`, which runs self-improvement rounds
+  unattended: serve the model (plus the previous adapter) with mlx-vlm on
+  localhost, evaluate on held-out seeds, collect runs on fresh seeds at a
+  temperature above 0, stop the server, build a dataset from every judge-verified
+  success so far, and train a LoRA from the base weights. There is no teacher
+  model; the only signal is the judge. Every phase leaves a file behind, so an
+  interrupted run resumes where it stopped. Verified with a one-round smoke run
+  on 2 tasks, including that the next round's server really loaded the adapter.
 - A `train` extra (`mlx-vlm[train]`, Apple Silicon only). Verified end to end on
   an M4 with 16 GB: LoRA on the 4-bit MLX Qwen2.5-VL-3B trains on these rows
   with full 1280x800 screenshots, using `--grad-checkpoint` and with Ollama's
