@@ -10,6 +10,23 @@ and a `BREAKING:` entry here.
 
 ## [Unreleased]
 
+### Added
+
+- `anybrowser_bench`, a seeded task suite that grades **agents** the way
+  conformance grades engines. It has eight task families: waiting, forms,
+  scrolling, pagination, a cookie wall, multi-page navigation, delayed search,
+  and an impossible task. Every answer is drawn from a seed, so it cannot be
+  memorised or guessed from what a page usually says. The judge never takes the
+  agent's word for anything: answers are checked against the seed, and form
+  tasks against what the bench server actually received. A confident wrong
+  answer scores -1, below an honest failure at 0, so a fitness score built on it
+  cannot be raised by guessing. Run it with `python -m anybrowser_bench`, or call
+  `run_suite(agent, engine)` with any `(engine, goal) -> RunResult` callable.
+- A scripted solver scores +1.000 on Chrome, which shows every task can be solved
+  and that the judge agrees with the server. claude-sonnet-5 and claude-opus-5.5
+  also score +1.000 on 2 seeds per task. The suite tests basic competence and has
+  no harder tier yet.
+
 ## [0.3.0] - 2026-10-03
 
 The agent can wait. A result that lands a second after a click used to leave

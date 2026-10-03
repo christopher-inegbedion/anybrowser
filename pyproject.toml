@@ -81,13 +81,13 @@ Issues = "https://github.com/christopher-inegbedion/anybrowser/issues"
 Changelog = "https://github.com/christopher-inegbedion/anybrowser/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/anybrowser", "conformance/anybrowser_conformance"]
+packages = ["src/anybrowser", "conformance/anybrowser_conformance", "bench/anybrowser_bench"]
 
 # The page-side JavaScript and the conformance fixture pages are loaded at
 # runtime from disk. Omitting them builds a wheel that imports fine and fails on
 # first use -- verified against the built wheel, not the source tree.
 [tool.hatch.build.targets.sdist]
-include = ["src", "conformance", "docs", "examples", "tests", "README.md", "LICENSE", "NOTICE"]
+include = ["src", "conformance", "bench", "docs", "examples", "tests", "README.md", "LICENSE", "NOTICE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
