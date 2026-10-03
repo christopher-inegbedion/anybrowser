@@ -9,6 +9,7 @@ from .browser import (
     SelectOptionTool,
     TypeTool,
     UploadTool,
+    WaitTool,
     default_tools,
 )
 
@@ -21,5 +22,6 @@ __all__ = [
     "SelectOptionTool",
     "TypeTool",
     "UploadTool",
+    "WaitTool",
     "default_tools",
 ]

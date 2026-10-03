@@ -36,6 +36,16 @@ and a `BREAKING:` entry here.
   a result lands as text. Nothing tested that before.
 - `pages/async.html`, a fixture whose text changes 700ms after a click, adding
   and removing no elements.
+- A `wait` tool, so the agent can actually use `await_change`. Until now
+  the engine could wait and the agent had no way to ask it to. The tool is a
+  thin wrapper: it caps the timeout at 15s and picks the baseline. The baseline
+  is the page *as the planner last saw it*, recorded by the runner as
+  `ToolContext.signature` before each snapshot. A model spends seconds deciding
+  to wait, and that is when results land, so measuring from when the tool runs
+  would miss them, report that nothing changed, and be contradicted by the next
+  observation. The tool is not mutating, so confirmation does not gate it. A wait
+  that times out still counts toward the stuck breaker, so a run cannot wait out
+  its budget.
 
 ## [0.2.0] - 2026-10-02
 

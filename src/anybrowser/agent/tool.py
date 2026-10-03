@@ -38,6 +38,11 @@ class ToolContext:
 
     engine: BrowserEngine
     snapshot: Snapshot | None = None
+    #: :meth:`BrowserEngine.page_signature` as of the last observation, taken
+    #: just before ``snapshot``. A tool that waits for change measures from here,
+    #: so a change that landed while the planner was deciding still counts.
+    #: ``None`` when the engine could not provide one.
+    signature: str | None = None
     state: dict[str, Any] = field(default_factory=dict)
 
     def element(self, handle: str) -> Element:

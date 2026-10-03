@@ -250,3 +250,88 @@ def test_decision_requires_a_narrative():
     """Every action must carry a human explanation, including from silent models."""
     with pytest.raises(ValueError):
         Decision(tool="click", arguments={}, narrative="   ")
+
+
+class _Loading(_Engine):
+    """A page whose content the test controls, standing in for a slow result."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.content = "spinner"
+
+    async def page_signature(self) -> str:
+        return self.content
+
+
+class _LandsWhileDeciding(_Scripted):
+    """A planner slow enough that the result arrives while it is thinking."""
+
+    def __init__(self, engine: _Loading, decisions: Sequence[Decision]) -> None:
+        super().__init__(decisions)
+        self._engine = engine
+
+    async def decide(self, observation: Observation, tools: Sequence[Tool]) -> Decision:
+        self._engine.content = "results"
+        return await super().decide(observation, tools)
+
+
+def _wait(seconds: float = 0.5) -> Decision:
+    return Decision(tool="wait", arguments={"seconds": seconds}, narrative="still loading")
+
+
+async def test_wait_counts_a_change_that_landed_while_the_planner_was_deciding():
+    """The wait measures from the page the planner saw, not from when it runs.
+
+    Measuring from now, this wait sits out its full 15 seconds, reports that
+    nothing changed, and the very next observation shows the results it said
+    never came.
+    """
+    engine = _Loading()
+    runner = AgentRunner(engine, _LandsWhileDeciding(engine, [_wait(15)]))
+    result = await runner.run("x")
+    waited = result.steps[0].result
+    assert waited.ok and waited.changed
+    assert result.elapsed < 5
+
+
+async def test_a_wait_that_sees_nothing_says_so_and_counts_toward_stuck():
+    """A page that is never coming must not let a run wait out its budget."""
+    runner = AgentRunner(
+        _Loading(),
+        _Scripted([_wait() for _ in range(10)]),
+        config=RunConfig(max_steps=10, repeat_limit=2),
+    )
+    result = await runner.run("x")
+    assert result.stop_reason == StopReason.STUCK
+    assert not result.steps[0].result.changed
+    assert "did not change" in result.steps[0].result.summary
+
+
+async def test_wait_is_not_gated_and_is_not_marked_as_a_failed_action():
+    """Waiting changes nothing, so there is nothing to confirm -- and a wait that
+    times out is a read that found nothing, not an action that missed."""
+    runner = AgentRunner(
+        _Loading(),
+        _Scripted([_wait()]),
+        config=RunConfig(confirm=lambda decision: False),
+    )
+    result = await runner.run("x")
+    assert "not confirmed" not in result.steps[0].result.summary
+    rendered = render_history(result.steps[:1], reads={"wait"})
+    assert "[no effect]" not in rendered
+
+
+async def test_wait_caps_what_a_model_asks_for():
+    from anybrowser.agent.tool import ToolContext
+    from anybrowser.agent.tools import WaitTool
+
+    class _Recording(_Loading):
+        async def await_change(self, *, timeout=10.0, poll=0.25, since=None):
+            self.timeout = timeout
+            return ActionOutcome.no_change("nothing")
+
+    engine = _Recording()
+    await WaitTool().run(ToolContext(engine=engine), seconds=600)
+    assert engine.timeout == WaitTool.max_seconds
+    bad = await WaitTool().run(ToolContext(engine=engine), seconds="soon")
+    assert not bad.ok

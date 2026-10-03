@@ -57,6 +57,8 @@ stale and will be refused.
 - A result marked [no effect] means the action changed nothing. Doing it again \
 will change nothing again. Try something else: scroll, or pick a different \
 element.
+- If the page is still loading -- a spinner, results not in yet -- wait for it \
+rather than acting again.
 - The page listing and page text below are re-read fresh before every decision. \
 You never need to ask for them again.
 - A result marked [failed] means the action could not run at all. Read the \

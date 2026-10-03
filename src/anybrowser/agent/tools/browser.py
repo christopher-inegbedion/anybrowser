@@ -28,6 +28,7 @@ __all__ = [
     "SelectOptionTool",
     "TypeTool",
     "UploadTool",
+    "WaitTool",
     "default_tools",
 ]
 
@@ -196,6 +197,59 @@ class UploadTool(_EngineTool):
         return ToolResult.of(outcome)
 
 
+class WaitTool(_EngineTool):
+    """Wait for the page to change, for when the right move is to do nothing yet.
+
+    A thin wrapper over :meth:`BrowserEngine.await_change`, which is where the
+    capability lives (ADR-0006). The tool only bounds the timeout and picks the
+    baseline.
+
+    The baseline is the page as the planner last saw it, not the page as it is
+    when this runs. A model spends seconds deciding to wait, and that is exactly
+    when a result tends to land; measuring from now would miss it, report that
+    nothing changed, and the next observation would contradict it.
+
+    Not mutating: waiting changes nothing, so it is not gated by confirmation.
+    It still counts toward the stuck breaker when it times out, so a run cannot
+    wait its way through the budget on a page that is never coming.
+    """
+
+    name = "wait"
+    description = (
+        "Wait for the page to change, when it is still loading: a spinner is up, "
+        "results have not appeared yet, or a request is in flight. Use this "
+        "instead of acting again. Returns as soon as anything changes."
+    )
+    parameters: ClassVar[Mapping[str, Any]] = {
+        "type": "object",
+        "properties": {
+            "seconds": {
+                "type": "number",
+                "default": 5,
+                "description": "The longest to wait, at most 15.",
+            }
+        },
+    }
+    mutating = False
+
+    #: A model will happily ask for a minute. A planner should look again
+    #: rather than sleep; a caller who disagrees can raise this.
+    max_seconds: float = 15.0
+
+    async def _run(self, ctx: ToolContext, seconds: float = 5, **_: Any) -> ToolResult:
+        try:
+            timeout = min(max(float(seconds), 0.5), self.max_seconds)
+        except (TypeError, ValueError):
+            return ToolResult.failure(f"seconds must be a number, not {seconds!r}")
+        outcome = await ctx.engine.await_change(timeout=timeout, since=ctx.signature)
+        summary = (
+            "the page changed"
+            if outcome.changed
+            else f"waited {timeout:g}s and the page did not change"
+        )
+        return ToolResult.of(outcome, summary)
+
+
 #: Everything a browsing agent needs, in the order a planner tends to reach for.
 BROWSER_TOOLS: tuple[type[Tool], ...] = (
     ClickTool,
@@ -205,6 +259,7 @@ BROWSER_TOOLS: tuple[type[Tool], ...] = (
     NavigateTool,
     SelectOptionTool,
     UploadTool,
+    WaitTool,
 )
 
 

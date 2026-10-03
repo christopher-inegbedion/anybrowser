@@ -134,6 +134,10 @@ class AgentRunner:
                 result.stop_reason = StopReason.BUDGET
                 break
 
+            # Before the snapshot, not after: a change landing between the two
+            # then shows in the snapshot *and* moves the signature, so a wait
+            # returns at once. The other order would hide it from the wait.
+            context.signature = await self._signature()
             try:
                 observation = await self._observe(goal, result.steps, notes, index)
             except AnyBrowserError as exc:
@@ -201,6 +205,14 @@ class AgentRunner:
     # ------------------------------------------------------------------ #
     # Internals                                                           #
     # ------------------------------------------------------------------ #
+
+    async def _signature(self) -> str | None:
+        try:
+            return await self._engine.page_signature()
+        except AnyBrowserError:
+            # A wait then measures from when it is called. Worse, not fatal.
+            logger.debug("page signature unavailable", exc_info=True)
+            return None
 
     async def _observe(
         self, goal: str, history: Sequence[Step], notes: Sequence[str], index: int
