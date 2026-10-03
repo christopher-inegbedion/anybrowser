@@ -132,6 +132,10 @@ _KEYS: dict[str, tuple[str, str, int, str]] = {
 }
 
 
+#: What a launched browser gets when no size is asked for. Matches PlaywrightEngine.
+_DEFAULT_VIEWPORT = (1280, 800)
+
+
 class ChromeEngine(BrowserEngine):
     """Drive one Chrome page through a flattened CDP target session."""
 
@@ -150,7 +154,15 @@ class ChromeEngine(BrowserEngine):
         extension_port: int = 8787,
         connect_timeout: float = 60.0,
         connection: CdpConnection | None = None,
+        viewport_width: int = 0,
+        viewport_height: int = 0,
     ) -> None:
+        """``viewport_width``/``viewport_height`` fix the page's size. Left at 0,
+        a browser this engine launched gets 1280x800 -- the Playwright engine's
+        default, and the size a vision model's coordinates were measured at --
+        while a browser someone else started is left exactly as they had it.
+        Headless Chrome's own default is 756x469, at which qwen2.5vl's clicks
+        all landed about 1.5x off."""
         if mode not in {"devtools", "extension"}:
             raise ValueError("mode must be 'devtools' or 'extension'")
         self._mode = mode
@@ -160,6 +172,7 @@ class ChromeEngine(BrowserEngine):
         #: extension can only make connections, never accept them.
         self._extension_port = extension_port
         self._connect_timeout = connect_timeout
+        self._viewport_size = (viewport_width, viewport_height)
         self._headless = headless
         self._launch = launch
         self._chrome_path = chrome_path
@@ -363,6 +376,21 @@ class ChromeEngine(BrowserEngine):
         self._session_id = str(attached["sessionId"])
         for domain in ("Page", "Runtime", "DOM", "Network"):
             await self._send(f"{domain}.enable")
+        await self._apply_viewport()
+
+    async def _apply_viewport(self) -> None:
+        width, height = self._viewport_size
+        if not (width and height):
+            if self._process is None:
+                # Not our browser. Resizing the page someone is looking at is
+                # not this engine's call to make unless it was asked to.
+                return
+            width, height = _DEFAULT_VIEWPORT
+        await self._send(
+            "Emulation.setDeviceMetricsOverride",
+            # deviceScaleFactor 0 keeps the display's own; only the size is ours.
+            {"width": width, "height": height, "deviceScaleFactor": 0, "mobile": False},
+        )
 
     async def _attach_via_extension(self) -> None:
         """Adopt a tab in the user's own browser.
@@ -389,6 +417,7 @@ class ChromeEngine(BrowserEngine):
         for domain in ("Page", "Runtime", "DOM"):
             with contextlib.suppress(Exception):
                 await self._send(f"{domain}.enable")
+        await self._apply_viewport()
 
     def _require_connection(self) -> CdpConnection:
         if self._connection is None:
