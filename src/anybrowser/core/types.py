@@ -199,7 +199,7 @@ def _warn_signature_renamed() -> None:
     )
 
 
-# The old keyword still constructs, so a third-party engine written against 0.3
+# The old keyword still constructs, so a third-party engine written against 0.2
 # keeps working and is told why rather than broken. A shim around the generated
 # __init__ rather than a hand-written one, so the field list stays in one place.
 _snapshot_init = Snapshot.__init__

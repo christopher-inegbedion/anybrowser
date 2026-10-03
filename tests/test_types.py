@@ -76,7 +76,7 @@ def _page(**kwargs):
 
 
 def test_the_old_signature_name_still_works_and_says_why_it_moved():
-    """A third-party engine written against 0.3 must keep running, and be told.
+    """A third-party engine written against 0.2 must keep running, and be told.
 
     Silently aliasing would leave it reaching for the element fingerprint when
     it meant "did the page change", which is the mistake the rename exists to

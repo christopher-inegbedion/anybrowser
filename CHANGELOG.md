@@ -10,24 +10,6 @@ and a `BREAKING:` entry here.
 
 ## [Unreleased]
 
-### Changed
-
-- BREAKING: `ToolContext.signature` is renamed `ToolContext.page_signature`
-  ([ADR-0007](docs/adr/0007-element-signature-is-named-for-what-it-measures.md)).
-  It holds a page signature, and the bare name meant both fingerprints. No
-  shim: it shipped in 0.3.0 and its only reader is the `wait` tool.
-
-### Deprecated
-
-- `Snapshot.signature` is renamed `Snapshot.element_signature`
-  ([ADR-0007](docs/adr/0007-element-signature-is-named-for-what-it-measures.md)).
-  It fingerprints the element set and does not move when only text changes, so
-  it cannot answer "did the page change", which is what
-  `BrowserEngine.page_signature()` is for. The old name still works for both
-  reading and constructing, and warns with a message that names the method you
-  probably wanted. It will be removed before 1.0. The daemon sends both keys and
-  reads either, so mixed versions keep the field without a protocol bump.
-
 ## [0.3.0] - 2026-10-03
 
 The agent can wait. A result that lands a second after a click used to leave
@@ -37,7 +19,9 @@ has it and the conformance suite grades it, and the reference agent reaches it
 through a `wait` tool. Safari's first run of a session is no longer a coin toss.
 
 `BrowserEngine` gains two members. Neither is abstract, so existing engines,
-third-party ones included, keep working unchanged.
+third-party ones included, keep working unchanged. `Snapshot.signature` is
+renamed `element_signature`, so the two page fingerprints can no longer be
+mistaken for each other. The old name still works, with a warning.
 
 ### Added
 
@@ -60,12 +44,23 @@ third-party ones included, keep working unchanged.
   the engine could wait and the agent had no way to ask it to. The tool is a
   thin wrapper: it caps the timeout at 15s and picks the baseline. The baseline
   is the page *as the planner last saw it*, recorded by the runner as
-  `ToolContext.signature` before each snapshot. A model spends seconds deciding
+  `ToolContext.page_signature` before each snapshot. A model spends seconds deciding
   to wait, and that is when results land, so measuring from when the tool runs
   would miss them, report that nothing changed, and be contradicted by the next
   observation. The tool is not mutating, so confirmation does not gate it. A wait
   that times out still counts toward the stuck breaker, so a run cannot wait out
   its budget.
+
+### Deprecated
+
+- `Snapshot.signature` is renamed `Snapshot.element_signature`
+  ([ADR-0007](docs/adr/0007-element-signature-is-named-for-what-it-measures.md)).
+  It fingerprints the element set and does not move when only text changes, so
+  it cannot answer "did the page change", which is what
+  `BrowserEngine.page_signature()` is for. The old name still works for both
+  reading and constructing, and warns with a message that names the method you
+  probably wanted. It will be removed before 1.0. The daemon sends both keys and
+  reads either, so mixed versions keep the field without a protocol bump.
 
 ### Fixed
 

@@ -20,9 +20,9 @@ either one is a breaking change.
 A docstring warning is the wrong defence. The person who reaches for the wrong
 one is a third-party engine author with a `Snapshot` already in hand, and
 `.signature` is the obvious attribute to compare. Nothing at that point tells
-them otherwise. The project has also just shipped a second bare `signature`:
-`ToolContext.signature` in 0.3.0 holds a *page* signature, so the bare word now
-meant both things.
+them otherwise. The same release had also just added a second bare `signature`:
+`ToolContext.signature`, introduced for the `wait` tool, held a *page*
+signature, so the bare word meant both things.
 
 Nothing in this repository reads `Snapshot.signature`. Engines set it, and the
 daemon carries it across the wire. So almost all of the cost of renaming falls
@@ -45,7 +45,7 @@ silent alias would keep the confusion; the point of the warning is to tell the
 author which fingerprint they probably meant. Passing both names is a
 `TypeError` rather than a guess.
 
-**The daemon sends both keys and reads either.** A 0.3 peer on either end of the
+**The daemon sends both keys and reads either.** A 0.2 peer on either end of the
 connection keeps the field, so this is not a `PROTOCOL_VERSION` bump. Removing
 the old key is the breaking change that the next bump will announce.
 
@@ -56,15 +56,15 @@ a cost with no effect on users.
 ## Consequences
 
 Good: the name now says what the field measures, at the moment someone reaches
-for it. An engine written against 0.3 keeps running and is told what changed and
+for it. An engine written against 0.2 keeps running and is told what changed and
 why.
 
 Bad: a shim around a frozen dataclass's generated `__init__`, which is less
 obvious than a plain field, and two keys on the wire until the next protocol
 bump.
 
-`ToolContext.signature` gets no shim. It shipped in 0.3.0, has one reader (the
-`wait` tool), and a deprecation path for it would outlive any code that used it.
+`ToolContext.signature` needs no shim: it was renamed before 0.3.0 was
+published, so no released version ever had it.
 
 ## When we would revisit
 

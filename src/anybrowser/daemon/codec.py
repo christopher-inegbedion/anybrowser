@@ -124,7 +124,7 @@ def dump_snapshot(snapshot: Snapshot) -> dict[str, Any]:
         "elements": [dump_element(e) for e in snapshot.elements],
         "text": snapshot.text,
         "element_signature": snapshot.element_signature,
-        # The pre-ADR-0007 key, so a 0.3 peer still reads the field. Drop it at
+        # The pre-ADR-0007 key, so a 0.2 peer still reads the field. Drop it at
         # the next PROTOCOL_VERSION bump, not before: removing it is the
         # breaking change that bump exists to announce.
         "signature": snapshot.element_signature,
