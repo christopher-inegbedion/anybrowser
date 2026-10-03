@@ -29,7 +29,7 @@ from typing import Any
 from anybrowser.agent import RunResult
 from anybrowser.models.provider import Completion, Message, ModelProvider
 
-__all__ = ["Exchange", "RecordedRun", "RecordingProvider", "write_attempt"]
+__all__ = ["Exchange", "RecordedRun", "RecordingProvider", "SeedingProvider", "write_attempt"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +77,49 @@ class RecordingProvider(ModelProvider):
             Exchange(tuple(messages), dict(options), completion.text, completion.stop_reason)
         )
         return completion
+
+    def structured_output(self, schema: Mapping[str, Any]) -> Mapping[str, Any] | None:
+        return self._inner.structured_output(schema)
+
+    def supports_images(self, model: str) -> bool:
+        return self._inner.supports_images(model)
+
+
+class SeedingProvider(ModelProvider):
+    """Sends a different ``seed`` with every request.
+
+    mlx-vlm's server samples from keys derived from a fixed default seed, so
+    at temperature 0.7 three repeats of one state came back identical, byte
+    for byte -- and the first self-improvement run's "sampled" collection was
+    in fact deterministic. ``seed`` is a standard OpenAI parameter; a server
+    that does not take it ignores it, and one that already varies (Ollama)
+    simply varies with it.
+    """
+
+    def __init__(self, inner: ModelProvider, start: int = 0) -> None:
+        self._inner = inner
+        self.name = inner.name
+        self._seeds = itertools.count(start)
+
+    async def complete(
+        self,
+        messages: Sequence[Message],
+        *,
+        model: str,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        stop: Sequence[str] = (),
+        **options: Any,
+    ) -> Completion:
+        options.setdefault("seed", next(self._seeds))
+        return await self._inner.complete(
+            messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stop=stop,
+            **options,
+        )
 
     def structured_output(self, schema: Mapping[str, Any]) -> Mapping[str, Any] | None:
         return self._inner.structured_output(schema)

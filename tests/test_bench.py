@@ -399,3 +399,89 @@ def test_the_same_step_recorded_twice_is_one_example(tmp_path):
         _recorded(rec, "success", [_step("click"), _step("done")])
     stats = build_sft([rec], tmp_path / "ds")
     assert stats.rows == 2 and stats.dropped_duplicate == 2
+
+
+def _scored(tmp_path, outcome: str, steps: list[dict], score: float):
+    """_recorded, with the attempt's score set to match its outcome."""
+    import json
+
+    where = _recorded(tmp_path, outcome, steps)
+    data = json.loads((where / "attempt.json").read_text())
+    data["score"] = score
+    (where / "attempt.json").write_text(json.dumps(data))
+    return where
+
+
+def test_a_premature_done_loses_to_an_honest_action_at_the_same_state(tmp_path):
+    """The signal training on successes alone never had: at the same
+    screenshot, finishing early (a false claim) is worse than acting on, even
+    when acting on did not succeed either."""
+    from anybrowser_bench.dataset import preference_pairs
+
+    rec = tmp_path / "rec"
+    _scored(rec, "false_claim", [_step("done", reply='{"done": true}')], -1.0)
+    _scored(rec, "failed", [_step("wait", reply='{"tool": "wait"}')], 0.0)
+    rows = [row for row, _ in preference_pairs([rec])]
+    assert len(rows) == 1
+    assert rows[0]["chosen"][-1]["content"] == '{"tool": "wait"}'
+    assert rows[0]["rejected"][-1]["content"] == '{"done": true}'
+    assert rows[0]["meta"]["why"] == "failed>false_claim"
+    assert rows[0]["chosen"][:-1] == rows[0]["rejected"][:-1], "one prompt, two answers"
+
+
+def test_between_equal_outcomes_an_action_with_effect_wins(tmp_path):
+    from anybrowser_bench.dataset import preference_pairs
+
+    rec = tmp_path / "rec"
+    _scored(rec, "failed", [_step("click", changed=False, reply="A")], 0.0)
+    _scored(rec, "failed", [_step("type_text", changed=True, reply="B")], 0.0)
+    (row,) = [row for row, _ in preference_pairs([rec])]
+    assert row["chosen"][-1]["content"] == "B" and row["meta"]["why"] == "effect>no_effect"
+
+
+def test_no_pair_where_the_outcomes_do_not_say_which_was_better(tmp_path):
+    from anybrowser_bench.dataset import preference_pairs
+
+    rec = tmp_path / "rec"
+    _scored(rec, "success", [_step("done", reply="X")], 1.0)
+    _scored(rec, "success", [_step("done", reply="Y")], 1.0)
+    _scored(rec, "success", [_step("done", reply="X")], 1.0)  # same reply: no contest
+    assert list(preference_pairs([rec])) == []
+
+
+def test_rebalancing_caps_the_share_of_done_rows(tmp_path):
+    import json
+
+    from anybrowser_bench.dataset import build_sft
+
+    rec = tmp_path / "rec"
+    for i in range(6):
+        _recorded(rec, "success", [_step("done", reply=f"done {i}")])
+    _recorded(rec, "success", [_step("click", reply="act"), _step("done", reply="last")])
+    stats = build_sft([rec], tmp_path / "ds", max_done_share=0.5)
+    rows = [json.loads(line) for line in (tmp_path / "ds" / "train.jsonl").open()]
+    tools = [r["meta"]["tool"] for r in rows]
+    assert tools.count("click") == 1 and tools.count("done") == 1
+    assert stats.dropped_balance == 6
+
+
+async def test_sampling_sends_a_fresh_seed_with_every_request():
+    """mlx-vlm's server fixes its sampling seed; without one per request, three
+    "sampled" repeats of a state are byte-identical and no pair can form."""
+    from anybrowser_bench.record import SeedingProvider
+
+    from anybrowser.models.provider import Completion, Message, ModelProvider, Role
+
+    seen: list[object] = []
+
+    class _Inner(ModelProvider):
+        name = "x"
+
+        async def complete(self, messages, **options):
+            seen.append(options.get("seed"))
+            return Completion(text="{}")
+
+    provider = SeedingProvider(_Inner(), start=7)
+    for _ in range(3):
+        await provider.complete([Message(role=Role.USER, text="hi")], model="m")
+    assert seen == [7, 8, 9]

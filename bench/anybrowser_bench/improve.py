@@ -55,10 +55,14 @@ class LoopConfig:
     out: Path
     model: str = BASE_MODEL
     rounds: int = 1
-    #: Never trained on. 2 seeds x 10 tasks = 20 attempts per evaluation.
-    eval_seeds: tuple[int, ...] = (1000, 1001)
+    #: Never trained on. 5 seeds x 10 tasks = 50 attempts per evaluation: with
+    #: 3, single tasks swung 0/3 <-> 3/3 between rounds and the trend was noise.
+    eval_seeds: tuple[int, ...] = (1000, 1001, 1002, 1003, 1004)
     #: Fresh training seeds per round: round r uses [r*stride, r*stride + n).
-    collect_seeds: int = 6
+    collect_seeds: int = 3
+    #: Attempts per training seed. Repeats share their first state, so their
+    #: differing replies at it become preference pairs.
+    repeats: int = 3
     seed_stride: int = 100
     temperature: float = 0.7
     #: Task ids to run; empty means the whole suite.
@@ -70,6 +74,17 @@ class LoopConfig:
     learning_rate: float = 1e-4
     lora_rank: int = 8
     epochs: int = 2
+    #: "orpo" trains on chosen/rejected pairs at identical states, falling back
+    #: to rebalanced SFT when there are none; "sft" is the first run's method.
+    train_mode: str = "orpo"
+    beta: float = 0.1
+    max_pairs_per_task: int = 10
+    #: An ORPO step on this machine is ~48s (two sequences, uncompiled); this
+    #: bounds a round's training to ~1.6h however many pairs there are.
+    max_iters: int = 120
+    #: SFT rebalancing (see dataset._rebalance).
+    max_per_task: int = 8
+    max_done_share: float = 0.5
 
 
 # --------------------------------------------------------------------------- #
@@ -145,6 +160,7 @@ async def _bench(
     temperature: float,
     record_to: Path | None,
     log: Path,
+    repeats: int = 1,
 ) -> Any:
     from anybrowser import open_engine
     from anybrowser.models.openai_compatible import OpenAICompatibleProvider
@@ -162,6 +178,9 @@ async def _bench(
         constrained=True,
         record=record_to is not None,
         temperature=temperature,
+        # Distinct per round, so a resumed or later round never replays the
+        # same sampling sequence.
+        seed=int(time.time()),
     )
     options = {**_viewport_defaults("chrome"), "port": config.chrome_port}
     with log.open("a") as sink:
@@ -178,16 +197,19 @@ async def _bench(
                 seeds=seeds,
                 on_attempt=progress,
                 record_to=record_to,
+                repeats=repeats,
             )
 
 
-def _train(config: LoopConfig, dataset: Path, adapter_dir: Path, rows: int, log: Path) -> None:
+def _train(
+    config: LoopConfig, dataset: Path, adapter_dir: Path, rows: int, log: Path, mode: str
+) -> None:
     _unload_ollama()
-    iters = max(1, rows * config.epochs)
+    iters = max(1, min(rows * config.epochs, config.max_iters))
     command = [
         sys.executable,
         "-m",
-        "mlx_vlm.lora",
+        "anybrowser_bench.mlx_train",
         "--model-path",
         config.model,
         "--dataset",
@@ -217,6 +239,8 @@ def _train(config: LoopConfig, dataset: Path, adapter_dir: Path, rows: int, log:
         "--output-path",
         str(adapter_dir),
     ]
+    if mode == "orpo":
+        command += ["--train-mode", "orpo", "--beta", str(config.beta)]
     with log.open("a") as sink:
         subprocess.run(command, stdout=sink, stderr=subprocess.STDOUT, check=True)
 
@@ -248,7 +272,7 @@ def _summary(report: Any) -> dict[str, Any]:
 
 async def run_round(config: LoopConfig, r: int, adapter: Path | None) -> Path:
     """One round. Returns the adapter it trained."""
-    from .dataset import build_sft
+    from .dataset import build_preferences, build_sft
 
     here = config.out / f"round-{r:02d}"
     here.mkdir(parents=True, exist_ok=True)
@@ -259,8 +283,15 @@ async def run_round(config: LoopConfig, r: int, adapter: Path | None) -> Path:
     if not (evaluation.exists() and collected.exists()):
         with serving(config, adapter, here / "server.log") as url:
             if not evaluation.exists():
+                # Recorded so a regression can be read rather than guessed at.
+                # Never trained on: datasets read round-*/recordings only.
                 report = await _bench(
-                    config, url, config.eval_seeds, temperature=0.0, record_to=None, log=log
+                    config,
+                    url,
+                    config.eval_seeds,
+                    temperature=0.0,
+                    record_to=here / "eval-recordings",
+                    log=log,
                 )
                 if not report.trustworthy:
                     raise RuntimeError(f"evaluation untrustworthy: {report.aborted or 'errors'}")
@@ -275,6 +306,7 @@ async def run_round(config: LoopConfig, r: int, adapter: Path | None) -> Path:
                     temperature=config.temperature,
                     record_to=here / "recordings",
                     log=log,
+                    repeats=config.repeats,
                 )
                 _write(collected, _summary(report))
 
@@ -285,13 +317,34 @@ async def run_round(config: LoopConfig, r: int, adapter: Path | None) -> Path:
             for f in sorted(dataset.rglob("*"), reverse=True):
                 f.unlink() if f.is_file() else f.rmdir()
         recordings = sorted(config.out.glob("round-*/recordings"))
-        stats = build_sft(recordings, dataset)
-        _write(here / "dataset.json", asdict(stats))
-        if stats.rows == 0:
-            raise RuntimeError("no successful steps to train on yet")
+        mode, rows = config.train_mode, 0
+        if mode == "orpo":
+            pstats = build_preferences(
+                recordings, dataset, max_pairs_per_task=config.max_pairs_per_task
+            )
+            _write(here / "dataset.json", {"mode": "orpo", **asdict(pstats)})
+            rows = pstats.pairs
+            if rows == 0:
+                for f in sorted(dataset.rglob("*"), reverse=True):
+                    f.unlink() if f.is_file() else f.rmdir()
+                mode = "sft"
+        if mode == "sft":
+            stats = build_sft(
+                recordings,
+                dataset,
+                max_per_task=config.max_per_task,
+                max_done_share=config.max_done_share,
+            )
+            _write(here / "dataset.json", {"mode": "sft", **asdict(stats)})
+            rows = stats.rows
+        if rows == 0:
+            raise RuntimeError("nothing to train on yet")
         started = time.monotonic()
-        _train(config, dataset, trained, stats.rows, log)
-        _write(here / "train.json", {"rows": stats.rows, "seconds": time.monotonic() - started})
+        _train(config, dataset, trained, rows, log, mode)
+        _write(
+            here / "train.json",
+            {"mode": mode, "rows": rows, "seconds": time.monotonic() - started},
+        )
     return trained
 
 
@@ -325,7 +378,7 @@ async def run(config: LoopConfig) -> None:
                 url,
                 config.eval_seeds,
                 temperature=0.0,
-                record_to=None,
+                record_to=final / "eval-recordings",
                 log=final / "log.txt",
             )
             _write(final / "eval.json", _summary(report))
@@ -337,8 +390,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--rounds", type=int, default=1)
     parser.add_argument("--model", default=BASE_MODEL)
-    parser.add_argument("--collect-seeds", type=int, default=6)
-    parser.add_argument("--eval-seeds", type=int, nargs="+", default=[1000, 1001])
+    parser.add_argument("--collect-seeds", type=int, default=3)
+    parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--eval-seeds", type=int, nargs="+", default=[1000, 1001, 1002, 1003, 1004])
+    parser.add_argument("--train-mode", choices=["orpo", "sft"], default="orpo")
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
@@ -349,6 +404,8 @@ def main(argv: list[str] | None = None) -> int:
         model=args.model,
         rounds=args.rounds,
         collect_seeds=args.collect_seeds,
+        repeats=args.repeats,
+        train_mode=args.train_mode,
         eval_seeds=tuple(args.eval_seeds),
         temperature=args.temperature,
         epochs=args.epochs,
@@ -363,7 +420,8 @@ def main(argv: list[str] | None = None) -> int:
             f"{entry['round']}: eval fitness {ev.get('fitness', float('nan')):+.3f} "
             f"({ev.get('success', '?')}/{ev.get('attempts', '?')} success), "
             f"collected {entry.get('collect', {}).get('success', '-')} successes, "
-            f"trained on {entry.get('dataset', {}).get('rows', '-')} rows"
+            f"trained ({entry.get('train', {}).get('mode', '-')}) on "
+            f"{entry.get('train', {}).get('rows', '-')} examples"
         )
     return 0
 

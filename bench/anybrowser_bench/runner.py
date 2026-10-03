@@ -19,8 +19,9 @@ from typing import Any
 
 from anybrowser.agent import RunResult, StopReason
 from anybrowser.core.engine import BrowserEngine
+from anybrowser.models.provider import ModelProvider
 
-from .record import Exchange, RecordedRun, RecordingProvider, write_attempt
+from .record import Exchange, RecordedRun, RecordingProvider, SeedingProvider, write_attempt
 from .server import BenchServer
 from .task import Outcome, Task, judge
 from .tasks import ALL_TASKS
@@ -133,12 +134,17 @@ async def run_suite(
     on_attempt: Callable[[Attempt], None] | None = None,
     max_consecutive_errors: int = 3,
     record_to: Path | None = None,
+    repeats: int = 1,
 ) -> Report:
     """Attempt every task at every seed, sequentially, on one engine.
 
     Stops after ``max_consecutive_errors`` errors in a row: by then the model
     server or the browser is down, and every further attempt costs time to
     learn nothing.
+
+    ``repeats`` attempts every (task, seed) that many times. Repeats start from
+    the same page, so with a temperature above 0 they are different replies to
+    an identical state -- the raw material for preference pairs.
 
     ``record_to`` writes each attempt's model exchanges there, for an agent
     that returns a :class:`~anybrowser_bench.record.RecordedRun` (``llm_agent``
@@ -148,7 +154,7 @@ async def run_suite(
     streak = 0
     with BenchServer() as server:
         for task in tasks:
-            for seed in seeds:
+            for seed in [s for s in seeds for _ in range(max(1, repeats))]:
                 attempt, exchanges = await _attempt(agent, engine, server, task, seed)
                 report.attempts.append(attempt)
                 if record_to is not None and exchanges:
@@ -225,6 +231,7 @@ def llm_agent(
     constrained: bool = False,
     record: bool = False,
     temperature: float = 0.0,
+    seed: int = 0,
 ) -> Agent:
     """The reference agent: :class:`AgentRunner` with an :class:`LLMPlanner`.
 
@@ -242,8 +249,13 @@ def llm_agent(
     """
     from anybrowser.agent import AgentRunner, LLMPlanner, RunConfig, VisionPlanner, vision_tools
 
+    # Above temperature 0, every request carries its own seed, counting up from
+    # ``seed``: a server that fixes its sampling seed otherwise returns the same
+    # "sample" every time (see SeedingProvider).
+    sampled: ModelProvider = SeedingProvider(provider, seed) if temperature > 0 else provider
+
     async def run(engine: BrowserEngine, goal: str) -> RunResult:
-        source = RecordingProvider(provider) if record else provider
+        source = RecordingProvider(sampled) if record else sampled
         if vision:
             planner: LLMPlanner = VisionPlanner(
                 source,

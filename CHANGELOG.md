@@ -71,6 +71,31 @@ and a `BREAKING:` entry here.
   success, and within them only steps the engine said changed the page, plus
   the final "done", so the model is not trained on the repeated no-effect
   clicks that sank the baseline. `--temperature` makes repeated attempts differ.
+- Preference training for self-improvement.
+  `python -m anybrowser_bench.dataset --preferences` builds chosen/rejected
+  pairs at identical states (the same prompt, history and screenshot bytes),
+  ranked by the bench's own scoring: a success beats an honest failure, which
+  beats a false claim. Between equal outcomes, an action that changed the page
+  beats one that did not. This produces "not yet" pairs, a premature done
+  against the action that should have come instead, even on tasks never
+  solved. `run_suite(repeats=N)` attempts each seed N times, so pairs can form.
+  `improve` now trains with ORPO by default and falls back to rebalanced SFT
+  (`max_per_task`, `max_done_share`) when there are no pairs. It also evaluates
+  on 5 held-out seeds and records evaluations without training on them.
+- `anybrowser_bench.mlx_train`, which runs `mlx_vlm.lora` with two runtime
+  fixes needed to train Qwen2.5-VL with ORPO in mlx-vlm 0.7.4. Its preference
+  dataset dropped `image_grid_thw`, and its training step is `mx.compile`d while
+  the vision tower reads the image grid as Python integers. Measured on an M4
+  with 16 GB: about 48s per pair, peaking at 9.6 GB.
+
+### Fixed (bench)
+
+- Sampling was not sampling. mlx-vlm's server derives its sampling keys from a
+  fixed default seed, so at temperature 0.7 repeats of one state came back
+  byte-identical, and the first self-improvement run's collection was in fact
+  deterministic. Every request above temperature 0 now carries its own `seed`
+  (`SeedingProvider`). On the same state, 4 of 4 replies now differ.
+
 - `python -m anybrowser_bench.improve`, which runs self-improvement rounds
   unattended: serve the model (plus the previous adapter) with mlx-vlm on
   localhost, evaluate on held-out seeds, collect runs on fresh seeds at a
