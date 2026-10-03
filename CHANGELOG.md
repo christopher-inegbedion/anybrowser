@@ -10,14 +10,16 @@ and a `BREAKING:` entry here.
 
 ## [Unreleased]
 
-### Fixed
+## [0.3.0] - 2026-10-03
 
-- Safari: the first run of a session failed tests that passed on every run
-  after it. `start()` only needs the background page to answer `tabs`, so it
-  returned while the content script in the target tab was still coming up, and
-  whatever acted first lost the race. It now waits for the page to be
-  answering, which is not fatal if it never does -- native input works on a page
-  the extension cannot see, and the first perception call explains itself.
+The agent can wait. A result that lands a second after a click used to leave
+it one move -- act again and hope. Waiting is now an engine primitive
+([ADR-0006](docs/adr/0006-waiting-is-an-engine-primitive.md)), so every backend
+has it and the conformance suite grades it, and the reference agent reaches it
+through a `wait` tool. Safari's first run of a session is no longer a coin toss.
+
+`BrowserEngine` gains two members. Neither is abstract, so existing engines,
+third-party ones included, keep working unchanged.
 
 ### Added
 
@@ -46,6 +48,15 @@ and a `BREAKING:` entry here.
   observation. The tool is not mutating, so confirmation does not gate it. A wait
   that times out still counts toward the stuck breaker, so a run cannot wait out
   its budget.
+
+### Fixed
+
+- Safari: the first run of a session failed tests that passed on every run
+  after it. `start()` only needs the background page to answer `tabs`, so it
+  returned while the content script in the target tab was still coming up, and
+  whatever acted first lost the race. It now waits for the page to be
+  answering, which is not fatal if it never does -- native input works on a page
+  the extension cannot see, and the first perception call explains itself.
 
 ## [0.2.0] - 2026-10-02
 
