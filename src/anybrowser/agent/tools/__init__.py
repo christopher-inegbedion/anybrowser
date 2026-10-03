@@ -12,11 +12,16 @@ from .browser import (
     WaitTool,
     default_tools,
 )
+from .vision import VISION_TOOLS, PointClickTool, PointScrollTool, PointTypeTool, vision_tools
 
 __all__ = [
     "BROWSER_TOOLS",
+    "VISION_TOOLS",
     "ClickTool",
     "NavigateTool",
+    "PointClickTool",
+    "PointScrollTool",
+    "PointTypeTool",
     "PressKeyTool",
     "ScrollTool",
     "SelectOptionTool",
@@ -24,4 +29,5 @@ __all__ = [
     "UploadTool",
     "WaitTool",
     "default_tools",
+    "vision_tools",
 ]

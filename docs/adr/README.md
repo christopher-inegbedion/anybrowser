@@ -16,3 +16,4 @@ that was wrong is as useful as the reasoning that was right.
 | [0005](0005-agent-is-a-reference-loop.md) | The agent runtime is a reference loop, not the product | Accepted |
 | [0006](0006-waiting-is-an-engine-primitive.md) | Waiting for the page is an engine primitive, not an agent tool | Accepted |
 | [0007](0007-element-signature-is-named-for-what-it-measures.md) | The element fingerprint is named for what it measures | Accepted |
+| [0008](0008-an-image-only-reference-agent.md) | An image-only reference agent, in screenshot pixels | Accepted |

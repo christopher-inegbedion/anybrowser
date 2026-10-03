@@ -36,6 +36,28 @@ def _coerce(value: str) -> Any:
     return value
 
 
+def _viewport_defaults(engine: str) -> dict[str, Any]:
+    """Ask for 1280x800 explicitly, from any engine that takes the option.
+
+    An engine leaves a browser it did not launch at that browser's size. A
+    stale Chrome on the default port once made a run's screenshots small,
+    and the vision agent's clicks all landed about 1.5x off -- with nothing
+    in the report to say so. The bench's numbers are only comparable at one
+    fixed size, so it asks for that size rather than trusting what it finds.
+    """
+    import inspect
+
+    from anybrowser.core.registry import engines
+
+    try:
+        params = inspect.signature(engines.get(engine)).parameters
+    except Exception:
+        return {}
+    if "viewport_width" in params and "viewport_height" in params:
+        return {"viewport_width": 1280, "viewport_height": 800}
+    return {}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m anybrowser_bench")
     parser.add_argument("--engine", default="chrome")
@@ -48,6 +70,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--task", action="append", default=[], help="Repeatable. Default: all.")
     parser.add_argument("--max-steps", type=int, default=15)
     parser.add_argument("--screenshots", action="store_true")
+    parser.add_argument(
+        "--vision",
+        action="store_true",
+        help="Image-only agent: decides from the screenshot, clicks by coordinates.",
+    )
     parser.add_argument(
         "--max-tokens",
         type=int,
@@ -64,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
         max_steps=args.max_steps,
         screenshots=args.screenshots,
         max_tokens=args.max_tokens,
+        vision=args.vision,
     )
     tasks = [task(t) for t in args.task] or list(ALL_TASKS)
     seeds = range(args.seed_offset, args.seed_offset + args.seeds)
@@ -72,7 +100,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {a.task_id}#{a.seed}: {a.outcome} in {a.steps} steps -- {a.reason}", flush=True)
 
     async def go() -> int:
-        async with await open_engine(args.engine, **_options(args.option)) as engine:
+        engine_options = {**_viewport_defaults(args.engine), **_options(args.option)}
+        async with await open_engine(args.engine, **engine_options) as engine:
             report = await run_suite(agent, engine, tasks=tasks, seeds=seeds, on_attempt=progress)
         print()
         print(report.table())

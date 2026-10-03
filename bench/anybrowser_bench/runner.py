@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from statistics import mean
 from typing import Any
@@ -41,6 +41,11 @@ class Attempt:
     seconds: float
     answer: str
     tools: tuple[str, ...]
+    #: Every step: what was chosen, why, and what the engine said happened.
+    #: The raw material for diagnosing an agent, and for training one -- a
+    #: step that changed the page is a different signal from one that did not,
+    #: long before the task's own outcome is known.
+    trace: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def scored(self) -> bool:
@@ -185,6 +190,17 @@ async def _attempt(
         seconds=round(time.monotonic() - started, 2),
         answer=result.answer,
         tools=tuple(s.decision.tool for s in result.steps if s.decision.tool),
+        trace=tuple(
+            {
+                "tool": s.decision.tool or "done",
+                "arguments": dict(s.decision.arguments),
+                "narrative": s.decision.narrative,
+                "ok": s.result.ok,
+                "changed": s.result.changed,
+                "summary": s.result.summary,
+            }
+            for s in result.steps
+        ),
     )
 
 
@@ -195,6 +211,7 @@ def llm_agent(
     max_steps: int = 15,
     screenshots: bool = False,
     max_tokens: int = 2048,
+    vision: bool = False,
 ) -> Agent:
     """The reference agent: :class:`AgentRunner` with an :class:`LLMPlanner`.
 
@@ -203,12 +220,21 @@ def llm_agent(
     and images multiply the cost of a suite run. Turn them on to grade the
     agent as the CLI runs it. A reasoning model needs ``max_tokens`` well
     above the default, or it can spend the budget thinking and never reply.
+
+    ``vision`` runs the image-only agent instead: :class:`VisionPlanner` with
+    coordinate tools, deciding from the screenshot alone.
     """
-    from anybrowser.agent import AgentRunner, LLMPlanner, RunConfig
+    from anybrowser.agent import AgentRunner, LLMPlanner, RunConfig, VisionPlanner, vision_tools
 
     async def run(engine: BrowserEngine, goal: str) -> RunResult:
-        planner = LLMPlanner(provider, model=model, max_tokens=max_tokens)
-        config = RunConfig(max_steps=max_steps, include_screenshot=screenshots)
-        return await AgentRunner(engine, planner, config=config).run(goal)
+        if vision:
+            planner: LLMPlanner = VisionPlanner(provider, model=model, max_tokens=max_tokens)
+            config = RunConfig(max_steps=max_steps, include_screenshot=True)
+            runner = AgentRunner(engine, planner, tools=vision_tools(), config=config)
+        else:
+            planner = LLMPlanner(provider, model=model, max_tokens=max_tokens)
+            config = RunConfig(max_steps=max_steps, include_screenshot=screenshots)
+            runner = AgentRunner(engine, planner, config=config)
+        return await runner.run(goal)
 
     return run

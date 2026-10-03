@@ -49,12 +49,21 @@ def test_a_seed_builds_the_same_instance_in_another_process():
     assert len(outputs) == 1
 
 
-def test_different_seeds_ask_for_different_answers():
+def test_different_seeds_build_different_instances():
+    """A run must not be able to memorise a (goal, page) -> action mapping.
+    Either may repeat on its own -- form-fill's page is fixed and its goal
+    varies; canvas-menu may ask for the same button, somewhere else -- but
+    never both."""
     for t in ALL_TASKS:
-        if t.kind is Kind.IMPOSSIBLE:
-            continue
-        answers = {(i.expected, tuple(i.expected_fields.items())) for i in map(t.build, range(5))}
-        assert len(answers) == 5, f"{t.id} repeats its answer across seeds"
+        seen = {(i.goal, tuple(sorted(i.pages.items()))) for i in map(t.build, range(5))}
+        assert len(seen) == 5, f"{t.id} repeats an instance across seeds"
+
+
+def test_answers_that_must_be_read_differ_across_seeds():
+    for t in ALL_TASKS:
+        if t.kind is Kind.ANSWER:
+            answers = {t.build(seed).expected for seed in range(5)}
+            assert len(answers) == 5, f"{t.id} repeats its answer across seeds"
 
 
 def test_every_answer_is_actually_on_its_pages():
@@ -261,3 +270,40 @@ async def test_a_model_that_cannot_produce_usable_output_is_failing_not_erroring
     report = await run_suite(garbled, _Page(), tasks=[task("long-list")], seeds=(0, 1))
     assert [a.outcome for a in report.attempts] == ["failed", "failed"]
     assert report.trustworthy
+
+
+async def test_grounding_scores_a_perfect_pointer_perfect_and_a_shifted_one_not():
+    from anybrowser_bench.grounding import Target, score
+
+    from anybrowser.core.types import Box
+
+    targets = [
+        Target(b"", 100, 100, "a", Box(40, 40, 20, 10), "dom"),
+        Target(b"", 100, 100, "b", Box(50, 50, 20, 10), "canvas"),
+    ]
+
+    async def perfect(png, description, w, h):
+        box = next(t.box for t in targets if t.description == description)
+        return box.center.as_tuple()
+
+    async def shifted(png, description, w, h):
+        x, y = await perfect(png, description, w, h)
+        return x * 1.5, y * 1.5  # the scaling bug a too-small screenshot caused
+
+    assert (await score(perfect, targets)).hit_rate == 1.0
+    assert (await score(shifted, targets)).hit_rate == 0.0
+
+
+@pytest.mark.parametrize(
+    ("text", "point"),
+    [
+        ('{"x": 412, "y": 230}', (412, 230)),
+        ('```json\n{"x": 139, "y": 166}}\n```', (139, 166)),
+        ("[100, 200, 140, 220]", (120, 210)),
+        ("I cannot find it", None),
+    ],
+)
+def test_grounding_reads_the_point_out_of_a_reply(text, point):
+    from anybrowser_bench.grounding import parse_point
+
+    assert parse_point(text) == point

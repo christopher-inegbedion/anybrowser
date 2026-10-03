@@ -259,6 +259,92 @@ def _delayed_search(rng: Random) -> Instance:
     )
 
 
+# -- canvas ------------------------------------------------------------------ #
+#
+# Everything below is drawn on a <canvas>. The DOM holds one element with no
+# text, so an agent that reads the page instead of looking at it has nothing to
+# go on -- these are the tasks that need eyes. Clicks are hit-tested in page
+# script against the same rectangles that were drawn, as a canvas game would.
+
+_CANVAS_W, _CANVAS_H = 1000, 600
+
+
+def _canvas_rects(rng: Random, count: int, w: int, h: int) -> list[tuple[int, int, int, int]]:
+    rects: list[tuple[int, int, int, int]] = []
+    while len(rects) < count:
+        r = (rng.randint(30, _CANVAS_W - w - 30), rng.randint(90, _CANVAS_H - h - 30), w, h)
+        if all(
+            r[0] + w + 30 < o[0]
+            or o[0] + o[2] + 30 < r[0]
+            or r[1] + h + 30 < o[1]
+            or o[1] + o[3] + 30 < r[1]
+            for o in rects
+        ):
+            rects.append(r)
+    return rects
+
+
+def _canvas_page(title: str, script: str) -> str:
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        f"<title>{escape(title)}</title>"
+        "<style>body{margin:24px;background:#111}canvas{display:block}</style></head><body>"
+        f"<canvas id='g' width='{_CANVAS_W}' height='{_CANVAS_H}'></canvas><script>"
+        "const cv=document.getElementById('g'),c=cv.getContext('2d');"
+        f"{script}</script></body></html>"
+    )
+
+
+def _canvas_menu(rng: Random) -> Instance:
+    labels = rng.sample(["Play", "Settings", "Shop", "Profile", "Help", "Credits", "Quit"], 5)
+    target = rng.choice(labels)
+    rects = _canvas_rects(rng, len(labels), 170, 56)
+    colors = ["#2b6cb0", "#2f855a", "#c05621", "#6b46c1", "#b83280"]
+    buttons = ",".join(
+        f"['{label}',{x},{y},{w},{h},'{color}']"
+        for label, (x, y, w, h), color in zip(labels, rects, colors, strict=True)
+    )
+    script = (
+        f"const B=[{buttons}];"
+        "function draw(msg){c.fillStyle='#1a202c';c.fillRect(0,0,cv.width,cv.height);"
+        "c.fillStyle='#e2e8f0';c.font='bold 34px sans-serif';c.textAlign='left';"
+        "c.fillText(msg||'Main menu',30,55);"
+        "for(const b of B){c.fillStyle=b[5];c.fillRect(b[1],b[2],b[3],b[4]);"
+        "c.fillStyle='#fff';c.font='22px sans-serif';c.textAlign='center';c.textBaseline='middle';"
+        "c.fillText(b[0],b[1]+b[3]/2,b[2]+b[4]/2);c.textBaseline='alphabetic'}}"
+        "draw();cv.addEventListener('click',e=>{const r=cv.getBoundingClientRect(),"
+        "x=e.clientX-r.left,y=e.clientY-r.top;"
+        "const b=B.find(b=>x>=b[1]&&x<=b[1]+b[3]&&y>=b[2]&&y<=b[2]+b[4]);if(!b)return;"
+        "draw('Opening '+b[0]+'...');"
+        "fetch('submit',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},"
+        "body:new URLSearchParams({choice:b[0]})})});"
+    )
+    return Instance(
+        goal=f"Open the {target} menu.",
+        pages={"index.html": _canvas_page("Game", script)},
+        expected_fields={"choice": target},
+    )
+
+
+def _canvas_read(rng: Random) -> Instance:
+    players = rng.sample([f"{f} {last[0]}." for f in _FIRST for last in _LAST], 6)
+    scores = [str(s) for s in rng.sample(range(1200, 98000), len(players))]
+    target = rng.randrange(len(players))
+    rows = ",".join(f"['{p}','{s}']" for p, s in zip(players, scores, strict=True))
+    script = (
+        f"const R=[{rows}];c.fillStyle='#1a202c';c.fillRect(0,0,cv.width,cv.height);"
+        "c.fillStyle='#f6e05e';c.font='bold 36px sans-serif';c.fillText('High scores',40,70);"
+        "c.font='26px monospace';R.forEach((r,i)=>{c.fillStyle=i%2?'#e2e8f0':'#90cdf4';"
+        "c.fillText(r[0],60,140+i*62);c.fillText(r[1],560,140+i*62)});"
+    )
+    return Instance(
+        goal=f"What is {players[target]}'s high score?",
+        pages={"index.html": _canvas_page("High scores", script)},
+        expected=scores[target],
+        decoys=tuple(s for i, s in enumerate(scores) if i != target),
+    )
+
+
 def _distinct_pairs(rng: Random, count: int) -> list[tuple[str, str]]:
     """Adjective-noun pairs with distinct nouns, so a one-word query has one hit
     family rather than matching half the corpus."""
@@ -275,6 +361,8 @@ ALL_TASKS: tuple[Task, ...] = (
     Task("navigate-detail", Kind.ANSWER, ("navigate", "read"), _navigate_detail),
     Task("missing-item", Kind.IMPOSSIBLE, ("honesty",), _missing_item),
     Task("delayed-search", Kind.ANSWER, ("type", "wait"), _delayed_search),
+    Task("canvas-menu", Kind.STATE, ("vision", "click"), _canvas_menu),
+    Task("canvas-read", Kind.ANSWER, ("vision", "read"), _canvas_read),
 )
 
 

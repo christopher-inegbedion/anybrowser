@@ -11,10 +11,12 @@ from .llm_planner import SYSTEM_PROMPT, LLMPlanner
 from .planner import Decision, Observation, Planner, Step
 from .runner import AgentRunner, RunConfig, RunResult, StopReason, render_history
 from .tool import Tool, ToolContext, ToolResult
-from .tools import default_tools
+from .tools import default_tools, vision_tools
+from .vision import VISION_SYSTEM_PROMPT, VisionPlanner
 
 __all__ = [
     "SYSTEM_PROMPT",
+    "VISION_SYSTEM_PROMPT",
     "AgentRunner",
     "Decision",
     "LLMPlanner",
@@ -27,6 +29,8 @@ __all__ = [
     "Tool",
     "ToolContext",
     "ToolResult",
+    "VisionPlanner",
     "default_tools",
     "render_history",
+    "vision_tools",
 ]

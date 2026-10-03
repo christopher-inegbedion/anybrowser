@@ -40,8 +40,32 @@ and a `BREAKING:` entry here.
   the model and excludes only real infrastructure failures.
 - `--max-tokens` for the bench. A reasoning model thinks inside this budget.
 
+- An image-only reference agent
+  ([ADR-0008](docs/adr/0008-an-image-only-reference-agent.md)): `VisionPlanner`
+  and `vision_tools()`. The model sees only the screenshot, shown at the
+  viewport's CSS size, and acts in screenshot pixels: click, type, scroll, press
+  a key, wait. It does not see the DOM, the page text or the URL. Run it with
+  `--vision` in the bench.
+- `ChromeEngine(viewport_width=, viewport_height=)`. A browser the engine
+  launches defaults to 1280x800, matching Playwright. A browser it attaches to
+  is left alone unless a size is given. The bench asks for 1280x800 explicitly
+  from any engine that takes the option.
+- Two canvas tasks, `canvas-menu` and `canvas-read`, where the page is a single
+  `<canvas>` with no text, so only an agent that looks can pass them.
+- `python -m anybrowser_bench.grounding`, which measures whether a model can
+  point at a named target on a screenshot, scored against the real boxes.
+  qwen2.5vl:3b: 29/34 through the provider, 10/10 on canvas.
+- `Attempt.trace`, which records every step: tool, arguments, narrative, and
+  whether the engine said it changed anything.
+
 ### Fixed
 
+- A click that redrew a canvas was reported as "click hit nothing", because the
+  page signature had no way to see pixels. The largest two canvases are now
+  fingerprinted coarsely (48x30, four bits per channel), so a redrawn screen
+  counts as a change and a still canvas does not. Applied to the shared page
+  script, the Playwright script and the Safari extension. Conformance tests
+  cover both sides; Safari is untested, as before.
 - A planner reply that hit the token limit before any visible output was
   reported as "did not return JSON: ''". It now uses the provider's stop reason
   and says the reply was cut off. qwen3:4b ran into this on a third of its steps
