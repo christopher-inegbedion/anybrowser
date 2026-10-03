@@ -127,7 +127,10 @@ def test_the_vision_schema_bounds_coordinates_to_the_screenshot():
     args = schema["properties"]["arguments"]["properties"]
     assert args["x"] == {"type": "integer", "minimum": 0, "maximum": 1279}
     assert args["y"] == {"type": "integer", "minimum": 0, "maximum": 799}
-    assert "done" in schema["properties"]["tool"]["enum"]
+    assert schema["properties"]["done"] == {"type": "boolean"}
+    assert "done" not in schema["properties"]["tool"]["enum"]
+    # Finishing is decided before the tool is chosen, not buried in the tool list.
+    assert schema["required"][:2] == ["narrative", "done"]
     assert "handle" not in args
 
 
@@ -149,7 +152,29 @@ def test_the_handle_schema_offers_only_handles_on_the_page():
     )
     tools = planner.decision_schema(empty, default_tools())["properties"]["tool"]["enum"]
     assert "click" not in tools, "a click by handle is impossible on a page with no elements"
-    assert {"scroll", "wait", "done"} <= set(tools)
+    assert {"scroll", "wait"} <= set(tools)
+
+
+def test_done_true_finishes_whatever_tool_is_named():
+    """The decoder makes the model fill "tool" even when finishing; done wins."""
+    from anybrowser.agent import LLMPlanner
+
+    planner = LLMPlanner(object(), model="m")  # type: ignore[arg-type]
+    reply = (
+        '{"narrative": "it shows 7030", "done": true, "answer": "7030", '
+        '"tool": "type_text", "arguments": {"text": "7030"}}'
+    )
+    decision = planner._parse(reply, vision_tools())
+    assert decision.done and decision.answer == "7030"
+
+
+def test_done_false_acts():
+    from anybrowser.agent import LLMPlanner
+
+    planner = LLMPlanner(object(), model="m")  # type: ignore[arg-type]
+    reply = '{"narrative": "n", "done": false, "answer": "", "tool": "click", "arguments": {"x": 1, "y": 2}}'
+    decision = planner._parse(reply, vision_tools())
+    assert not decision.done and decision.tool == "click"
 
 
 def test_tool_done_in_a_flat_reply_finishes_the_run():

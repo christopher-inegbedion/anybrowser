@@ -84,6 +84,12 @@ and a `BREAKING:` entry here.
   with full 1280x800 screenshots, using `--grad-checkpoint` and with Ollama's
   models unloaded. It peaks at 8.9 GB and takes 25-50s per step, about 2,270
   tokens per example.
+- The constrained reply now makes finishing an explicit `done` boolean, decided
+  before the tool. With "done" as the last tool name, qwen2.5vl on MLX wrote the
+  right answer ("7030") beside `"tool": "type_text"` for four steps running and
+  never finished: 0 successes in about 24 held-out attempts. With the boolean, the
+  same tasks and seeds give 5 of 10. It now finishes too eagerly instead (5 false
+  claims). Those score -1 and never enter a training set.
 - Key names from models are normalised in `press_key`: "enter", "RETURN" and
   "esc" become "Enter" and "Escape". qwen2.5vl's search failed on
   "unsupported key (key='enter')".

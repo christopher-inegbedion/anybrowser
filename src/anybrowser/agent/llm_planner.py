@@ -72,9 +72,11 @@ not what the action is.
 #: Appended to the request when the provider enforces the schema, so the prompt
 #: does not describe one reply shape while the decoder enforces another.
 _CONSTRAINED_REPLY = (
-    'Reply format: {"narrative", "tool", "arguments", "answer"}. To act, set "tool" '
-    'and its "arguments", and leave "answer" empty. Only when the goal is achieved, '
-    'set "tool" to "done" and put what you found or did in "answer".'
+    'Reply format: {"narrative", "done", "answer", "tool", "arguments"}. "done" is '
+    "true when the goal is achieved -- including when the page already shows what the "
+    'goal asks for -- and then "answer" holds what you found or did, and "tool" is '
+    'ignored. Otherwise "done" is false, "answer" is empty, and "tool" and '
+    '"arguments" are the one action to take.'
 )
 
 #: Stop reasons meaning "hit the token limit": OpenAI-compatible APIs say
@@ -238,13 +240,18 @@ class LLMPlanner(Planner):
     # ------------------------------------------------------------------ #
 
     def decision_schema(self, observation: Observation, tools: Sequence[Tool]) -> dict[str, Any]:
-        """One flat object: narrative, tool, arguments, answer.
+        """One flat object: narrative, done, answer, tool, arguments.
 
-        Flat, with "done" as just another tool, rather than a choice between an
-        action shape and a finish shape. Ollama does not keep key order, so a
-        model that happened to start with "answer" locked itself into the
-        finish branch and wrote its plan as the answer. A flat schema has no
-        branch to fall into.
+        Flat, rather than a choice between an action shape and a finish shape:
+        Ollama does not keep key order, so a model that happened to start with
+        "answer" locked itself into the finish branch and wrote its plan as the
+        answer. A flat schema has no branch to fall into.
+
+        Finishing is its own boolean, not a tool name. With "done" as the last
+        entry in the tool enum, qwen2.5vl wrote ``"answer": "7030"`` -- the right
+        answer -- beside ``"tool": "type_text"``, four steps running, and never
+        finished; it knew it was done and the shape gave it no direct way to say
+        so. A yes/no it must fill in every step, ahead of the tool, is that way.
 
         Every argument is narrowed to what the page allows, via
         :meth:`_constrain`; a tool whose required argument cannot be satisfied
@@ -273,15 +280,16 @@ class LLMPlanner(Planner):
             "type": "object",
             "properties": {
                 "narrative": {"type": "string", "maxLength": 300},
-                "tool": {"type": "string", "enum": [*names, "done"]},
+                "done": {"type": "boolean"},
+                "answer": {"type": "string", "maxLength": 500},
+                "tool": {"type": "string", "enum": names},
                 "arguments": {
                     "type": "object",
                     "properties": arguments,
                     "additionalProperties": False,
                 },
-                "answer": {"type": "string", "maxLength": 500},
             },
-            "required": ["narrative", "tool", "arguments", "answer"],
+            "required": ["narrative", "done", "answer", "tool", "arguments"],
             "additionalProperties": False,
         }
 
