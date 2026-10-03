@@ -247,7 +247,7 @@ class BrowserEngine(abc.ABC):
         every poll look like progress.
 
         .. warning::
-           Not the same as :attr:`~anybrowser.core.types.Snapshot.signature`,
+           Not the same as :attr:`~anybrowser.core.types.Snapshot.element_signature`,
            which is element-derived and does not move when only text changes.
            That one is for spotting a changed element set; this one is for
            "did anything happen".

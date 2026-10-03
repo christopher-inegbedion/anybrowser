@@ -67,3 +67,45 @@ def test_outcome_constructors_reject_a_detail_kwarg():
     outcome = ActionOutcome.no_change("nothing happened", reason="already at the limit")
     assert outcome.detail == "nothing happened"
     assert outcome.data["reason"] == "already at the limit"
+
+
+def _page(**kwargs):
+    from anybrowser.core.types import Snapshot
+
+    return Snapshot(url="https://x.invalid/", title="x", viewport=Viewport(800, 600), **kwargs)
+
+
+def test_the_old_signature_name_still_works_and_says_why_it_moved():
+    """A third-party engine written against 0.3 must keep running, and be told.
+
+    Silently aliasing would leave it reaching for the element fingerprint when
+    it meant "did the page change", which is the mistake the rename exists to
+    stop -- so the warning names the method it probably wanted.
+    """
+    with pytest.warns(DeprecationWarning, match="page_signature"):
+        page = _page(signature="3:abc")
+    assert page.element_signature == "3:abc"
+    with pytest.warns(DeprecationWarning, match="element_signature"):
+        assert page.signature == "3:abc"
+
+
+def test_the_new_name_does_not_warn():
+    # filterwarnings turns any DeprecationWarning into an error, so this would
+    # fail if the shim fired on the new name too.
+    assert _page(element_signature="3:abc").element_signature == "3:abc"
+
+
+def test_passing_both_names_is_refused_rather_than_guessed():
+    with pytest.warns(DeprecationWarning), pytest.raises(TypeError):
+        _page(signature="a", element_signature="b")
+
+
+def test_the_wire_carries_both_keys_and_reads_either():
+    """Mixed versions across the daemon keep the field, without a protocol bump."""
+    from anybrowser.daemon.codec import dump_snapshot, load_snapshot
+
+    wire = dump_snapshot(_page(element_signature="3:abc"))
+    assert wire["element_signature"] == wire["signature"] == "3:abc"
+    old_peer = {k: v for k, v in wire.items() if k != "element_signature"}
+    assert load_snapshot(old_peer).element_signature == "3:abc"
+    assert load_snapshot(wire).element_signature == "3:abc"

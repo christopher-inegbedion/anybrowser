@@ -241,7 +241,7 @@ class WaitTool(_EngineTool):
             timeout = min(max(float(seconds), 0.5), self.max_seconds)
         except (TypeError, ValueError):
             return ToolResult.failure(f"seconds must be a number, not {seconds!r}")
-        outcome = await ctx.engine.await_change(timeout=timeout, since=ctx.signature)
+        outcome = await ctx.engine.await_change(timeout=timeout, since=ctx.page_signature)
         summary = (
             "the page changed"
             if outcome.changed

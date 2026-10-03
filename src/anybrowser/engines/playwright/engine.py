@@ -246,7 +246,7 @@ class PlaywrightEngine(BrowserEngine):
             ),
             elements=elements,
             text=raw.get("text", ""),
-            signature=str(raw.get("signature", "")),
+            element_signature=str(raw.get("signature", "")),
             captured_at=time.time(),
             frames=await self.frames(),
         )

@@ -84,7 +84,7 @@ def build_snapshot(
         viewport=_viewport(raw.get("viewport") or {}),
         elements=elements,
         text=str(raw.get("text") or ""),
-        signature=str(raw.get("signature") or ""),
+        element_signature=str(raw.get("signature") or ""),
         captured_at=time.time(),
         frames=tuple(frames),
     )

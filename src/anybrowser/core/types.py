@@ -21,6 +21,7 @@ Two coordinate spaces exist and they are never mixed:
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
@@ -166,7 +167,11 @@ class Snapshot:
     viewport: Viewport
     elements: Sequence[Element] = ()
     text: str = ""
-    signature: str = ""
+    #: A fingerprint of the *element set*: for telling whether the interactive
+    #: elements changed. It does not move when only text changes, so it cannot
+    #: answer "did anything happen" -- that is
+    #: :meth:`~anybrowser.core.engine.BrowserEngine.page_signature`. See ADR-0007.
+    element_signature: str = ""
     captured_at: float = 0.0
     frames: Sequence[FrameInfo] = ()
     extra: Mapping[str, Any] = field(default_factory=dict)
@@ -176,6 +181,41 @@ class Snapshot:
             if el.handle == handle:
                 return el
         return None
+
+    @property
+    def signature(self) -> str:
+        """Deprecated: renamed :attr:`element_signature` (ADR-0007)."""
+        _warn_signature_renamed()
+        return self.element_signature
+
+
+def _warn_signature_renamed() -> None:
+    warnings.warn(
+        "Snapshot.signature is renamed Snapshot.element_signature. It fingerprints the "
+        "element set only; for 'did the page change' use BrowserEngine.page_signature() "
+        "(ADR-0007). The old name will be removed before 1.0.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
+
+# The old keyword still constructs, so a third-party engine written against 0.3
+# keeps working and is told why rather than broken. A shim around the generated
+# __init__ rather than a hand-written one, so the field list stays in one place.
+_snapshot_init = Snapshot.__init__
+
+
+def _snapshot_init_accepting_old_name(self: Snapshot, *args: Any, **kwargs: Any) -> None:
+    if "signature" in kwargs:
+        _warn_signature_renamed()
+        old = kwargs.pop("signature")
+        if "element_signature" in kwargs:
+            raise TypeError("pass element_signature or signature, not both")
+        kwargs["element_signature"] = old
+    _snapshot_init(self, *args, **kwargs)
+
+
+Snapshot.__init__ = _snapshot_init_accepting_old_name  # type: ignore[method-assign]
 
 
 @dataclass(frozen=True, slots=True)

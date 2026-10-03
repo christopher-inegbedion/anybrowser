@@ -137,7 +137,7 @@ class AgentRunner:
             # Before the snapshot, not after: a change landing between the two
             # then shows in the snapshot *and* moves the signature, so a wait
             # returns at once. The other order would hide it from the wait.
-            context.signature = await self._signature()
+            context.page_signature = await self._page_signature()
             try:
                 observation = await self._observe(goal, result.steps, notes, index)
             except AnyBrowserError as exc:
@@ -206,7 +206,7 @@ class AgentRunner:
     # Internals                                                           #
     # ------------------------------------------------------------------ #
 
-    async def _signature(self) -> str | None:
+    async def _page_signature(self) -> str | None:
         try:
             return await self._engine.page_signature()
         except AnyBrowserError:

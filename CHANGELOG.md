@@ -10,6 +10,24 @@ and a `BREAKING:` entry here.
 
 ## [Unreleased]
 
+### Changed
+
+- BREAKING: `ToolContext.signature` is renamed `ToolContext.page_signature`
+  ([ADR-0007](docs/adr/0007-element-signature-is-named-for-what-it-measures.md)).
+  It holds a page signature, and the bare name meant both fingerprints. No
+  shim: it shipped in 0.3.0 and its only reader is the `wait` tool.
+
+### Deprecated
+
+- `Snapshot.signature` is renamed `Snapshot.element_signature`
+  ([ADR-0007](docs/adr/0007-element-signature-is-named-for-what-it-measures.md)).
+  It fingerprints the element set and does not move when only text changes, so
+  it cannot answer "did the page change", which is what
+  `BrowserEngine.page_signature()` is for. The old name still works for both
+  reading and constructing, and warns with a message that names the method you
+  probably wanted. It will be removed before 1.0. The daemon sends both keys and
+  reads either, so mixed versions keep the field without a protocol bump.
+
 ## [0.3.0] - 2026-10-03
 
 The agent can wait. A result that lands a second after a click used to leave

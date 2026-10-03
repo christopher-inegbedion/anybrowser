@@ -123,7 +123,11 @@ def dump_snapshot(snapshot: Snapshot) -> dict[str, Any]:
         "viewport": dump_viewport(snapshot.viewport),
         "elements": [dump_element(e) for e in snapshot.elements],
         "text": snapshot.text,
-        "signature": snapshot.signature,
+        "element_signature": snapshot.element_signature,
+        # The pre-ADR-0007 key, so a 0.3 peer still reads the field. Drop it at
+        # the next PROTOCOL_VERSION bump, not before: removing it is the
+        # breaking change that bump exists to announce.
+        "signature": snapshot.element_signature,
         "captured_at": snapshot.captured_at,
         "frames": [
             {
@@ -146,7 +150,7 @@ def load_snapshot(raw: Mapping[str, Any]) -> Snapshot:
         viewport=load_viewport(raw.get("viewport") or {}),
         elements=tuple(load_element(e) for e in raw.get("elements") or ()),
         text=str(raw.get("text", "")),
-        signature=str(raw.get("signature", "")),
+        element_signature=str(raw.get("element_signature", raw.get("signature", ""))),
         captured_at=float(raw.get("captured_at", 0.0)),
         frames=tuple(
             FrameInfo(
