@@ -87,6 +87,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Per reply. Raise it for reasoning models, which think inside this budget.",
     )
     parser.add_argument("--json", type=Path, help="Write the full report here.")
+    parser.add_argument(
+        "--record",
+        type=Path,
+        help="Keep every model exchange (prompt, screenshot, reply) here, for training.",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.0,
+        help="Above 0, repeated attempts differ: needed to collect successes to train on.",
+    )
     args = parser.parse_args(argv)
 
     provider = model_registry.get(args.model)(**_options(args.model_option))
@@ -98,6 +109,8 @@ def main(argv: list[str] | None = None) -> int:
         max_tokens=args.max_tokens,
         vision=args.vision,
         constrained=args.constrained,
+        record=args.record is not None,
+        temperature=args.temperature,
     )
     tasks = [task(t) for t in args.task] or list(ALL_TASKS)
     seeds = range(args.seed_offset, args.seed_offset + args.seeds)
@@ -108,7 +121,14 @@ def main(argv: list[str] | None = None) -> int:
     async def go() -> int:
         engine_options = {**_viewport_defaults(args.engine), **_options(args.option)}
         async with await open_engine(args.engine, **engine_options) as engine:
-            report = await run_suite(agent, engine, tasks=tasks, seeds=seeds, on_attempt=progress)
+            report = await run_suite(
+                agent,
+                engine,
+                tasks=tasks,
+                seeds=seeds,
+                on_attempt=progress,
+                record_to=args.record,
+            )
         print()
         print(report.table())
         if args.json:

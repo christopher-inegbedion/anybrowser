@@ -11,6 +11,7 @@ import os
 import subprocess
 import sys
 import urllib.request
+from pathlib import Path
 from urllib.parse import urlencode
 
 import pytest
@@ -307,3 +308,94 @@ def test_grounding_reads_the_point_out_of_a_reply(text, point):
     from anybrowser_bench.grounding import parse_point
 
     assert parse_point(text) == point
+
+
+# -- recording and datasets -------------------------------------------------- #
+
+
+def _recorded(tmp_path, outcome: str, steps: list[dict]):
+    """One recorded attempt on disk, the way run_suite writes it."""
+    from anybrowser_bench.record import Exchange, write_attempt
+    from anybrowser_bench.runner import Attempt
+
+    from anybrowser.models.provider import ImagePart, Message, Role
+
+    trace = tuple(s["step"] for s in steps if s["step"] is not None)
+    attempt = Attempt(
+        task_id="canvas-menu",
+        seed=0,
+        kind="state",
+        outcome=outcome,
+        score=1.0 if outcome == "success" else 0.0,
+        reason="",
+        stop_reason="done",
+        steps=len(trace),
+        seconds=1.0,
+        answer="",
+        tools=tuple(s["tool"] for s in trace),
+        trace=trace,
+    )
+    exchanges = [
+        Exchange(
+            messages=(
+                Message(role=Role.SYSTEM, text="sys"),
+                Message(role=Role.USER, text=f"step {i}", images=[ImagePart(data=b"png%d" % i)]),
+            ),
+            options={"response_format": {"type": "json_schema"}},
+            reply=s["reply"],
+        )
+        for i, s in enumerate(steps)
+    ]
+    return write_attempt(tmp_path, attempt, exchanges)
+
+
+def _step(tool, changed=True, reply=None):
+    return {
+        "reply": reply or f'{{"tool": "{tool}"}}',
+        "step": {
+            "tool": tool,
+            "arguments": {},
+            "narrative": "",
+            "ok": True,
+            "changed": changed,
+            "summary": "",
+        },
+    }
+
+
+def test_a_recorded_attempt_keeps_exactly_what_the_model_saw(tmp_path):
+    import json
+
+    where = _recorded(tmp_path, "success", [_step("click"), _step("done")])
+    step = json.loads((where / "step-00.json").read_text())
+    assert [m["role"] for m in step["messages"]] == ["system", "user"]
+    assert (where / step["messages"][1]["images"][0]).read_bytes() == b"png0"
+    assert step["options"] == {"response_format": {"type": "json_schema"}}
+    assert json.loads((where / "attempt.json").read_text())["outcome"] == "success"
+
+
+def test_the_dataset_keeps_successes_and_drops_steps_that_did_nothing(tmp_path):
+    import json
+
+    from anybrowser_bench.dataset import build_sft
+
+    rec = tmp_path / "rec"
+    _recorded(rec, "success", [_step("click"), _step("click", changed=False), _step("done")])
+    _recorded(rec, "false_claim", [_step("click"), _step("done")])
+    stats = build_sft([rec], tmp_path / "ds")
+    rows = [json.loads(line) for line in (tmp_path / "ds" / "train.jsonl").open()]
+    assert stats.successes == 1 and stats.dropped_no_effect == 1
+    assert [r["meta"]["tool"] for r in rows] == ["click", "done"]
+    assert [m["role"] for m in rows[0]["messages"]] == ["system", "user", "assistant"]
+    assert rows[0]["messages"][-1]["content"] == '{"tool": "click"}'
+    assert Path(rows[0]["images"][0]).read_bytes() == b"png0"
+
+
+def test_the_same_step_recorded_twice_is_one_example(tmp_path):
+    from anybrowser_bench.dataset import build_sft
+
+    rec = tmp_path / "rec"
+    for _ in range(2):
+        _recorded(rec, "success", [_step("click"), _step("done")])
+    stats = build_sft([rec], tmp_path / "ds")
+    assert stats.rows == 2 and stats.dropped_duplicate == 2

@@ -12,13 +12,15 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
+from pathlib import Path
 from statistics import mean
 from typing import Any
 
 from anybrowser.agent import RunResult, StopReason
 from anybrowser.core.engine import BrowserEngine
 
+from .record import Exchange, RecordedRun, RecordingProvider, write_attempt
 from .server import BenchServer
 from .task import Outcome, Task, judge
 from .tasks import ALL_TASKS
@@ -130,20 +132,27 @@ async def run_suite(
     seeds: Sequence[int] = (0, 1, 2),
     on_attempt: Callable[[Attempt], None] | None = None,
     max_consecutive_errors: int = 3,
+    record_to: Path | None = None,
 ) -> Report:
     """Attempt every task at every seed, sequentially, on one engine.
 
     Stops after ``max_consecutive_errors`` errors in a row: by then the model
     server or the browser is down, and every further attempt costs time to
     learn nothing.
+
+    ``record_to`` writes each attempt's model exchanges there, for an agent
+    that returns a :class:`~anybrowser_bench.record.RecordedRun` (``llm_agent``
+    with ``record=True``). See :mod:`anybrowser_bench.record`.
     """
     report = Report()
     streak = 0
     with BenchServer() as server:
         for task in tasks:
             for seed in seeds:
-                attempt = await _attempt(agent, engine, server, task, seed)
+                attempt, exchanges = await _attempt(agent, engine, server, task, seed)
                 report.attempts.append(attempt)
+                if record_to is not None and exchanges:
+                    write_attempt(record_to, attempt, exchanges)
                 if on_attempt:
                     on_attempt(attempt)
                 streak = streak + 1 if not attempt.scored else 0
@@ -155,7 +164,7 @@ async def run_suite(
 
 async def _attempt(
     agent: Agent, engine: BrowserEngine, server: BenchServer, task: Task, seed: int
-) -> Attempt:
+) -> tuple[Attempt, list[Exchange]]:
     instance = task.build(seed)
     root = server.mount(instance)
     started = time.monotonic()
@@ -178,7 +187,7 @@ async def _attempt(
         )
         outcome, score = verdict.outcome.value, verdict.score
         reason = verdict.reason if not result.error else f"{verdict.reason} ({result.error})"
-    return Attempt(
+    attempt = Attempt(
         task_id=task.id,
         seed=seed,
         kind=task.kind.value,
@@ -202,6 +211,7 @@ async def _attempt(
             for s in result.steps
         ),
     )
+    return attempt, list(getattr(result, "exchanges", ()))
 
 
 def llm_agent(
@@ -213,6 +223,8 @@ def llm_agent(
     max_tokens: int = 2048,
     vision: bool = False,
     constrained: bool = False,
+    record: bool = False,
+    temperature: float = 0.0,
 ) -> Agent:
     """The reference agent: :class:`AgentRunner` with an :class:`LLMPlanner`.
 
@@ -224,23 +236,42 @@ def llm_agent(
 
     ``vision`` runs the image-only agent instead: :class:`VisionPlanner` with
     coordinate tools, deciding from the screenshot alone. ``constrained`` has
-    the provider enforce the reply's shape (ADR-0009).
+    the provider enforce the reply's shape (ADR-0009). ``record`` keeps every
+    model exchange verbatim for training; ``temperature`` above 0 makes repeated
+    attempts differ, which is what collecting successes to learn from needs.
     """
     from anybrowser.agent import AgentRunner, LLMPlanner, RunConfig, VisionPlanner, vision_tools
 
     async def run(engine: BrowserEngine, goal: str) -> RunResult:
+        source = RecordingProvider(provider) if record else provider
         if vision:
             planner: LLMPlanner = VisionPlanner(
-                provider, model=model, max_tokens=max_tokens, constrained=constrained
+                source,
+                model=model,
+                max_tokens=max_tokens,
+                constrained=constrained,
+                temperature=temperature,
             )
             config = RunConfig(max_steps=max_steps, include_screenshot=True)
             runner = AgentRunner(engine, planner, tools=vision_tools(), config=config)
         else:
             planner = LLMPlanner(
-                provider, model=model, max_tokens=max_tokens, constrained=constrained
+                source,
+                model=model,
+                max_tokens=max_tokens,
+                constrained=constrained,
+                temperature=temperature,
             )
             config = RunConfig(max_steps=max_steps, include_screenshot=screenshots)
             runner = AgentRunner(engine, planner, config=config)
-        return await runner.run(goal)
+        result = await runner.run(goal)
+        if isinstance(source, RecordingProvider):
+            recorded = RecordedRun(**{f: getattr(result, f) for f in _RUN_FIELDS})
+            recorded.exchanges = source.exchanges
+            return recorded
+        return result
 
     return run
+
+
+_RUN_FIELDS = tuple(f.name for f in fields(RunResult))

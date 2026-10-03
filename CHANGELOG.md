@@ -63,6 +63,19 @@ and a `BREAKING:` entry here.
   tool, arguments, answer, with "done" as a tool), narrowed to the page: handles
   must be in the current listing, and vision coordinates must be inside the
   screenshot. Use `--constrained` in the bench.
+- Training data from the agent's own runs. `--record DIR` keeps every model
+  exchange verbatim: the system prompt, the user message, the screenshot, the
+  request options and the reply, alongside the judge's outcome.
+  `python -m anybrowser_bench.dataset DIR --out DS` builds a fine-tuning set in
+  the format `mlx_vlm.lora` loads. It keeps only attempts the judge scored a
+  success, and within them only steps the engine said changed the page, plus
+  the final "done", so the model is not trained on the repeated no-effect
+  clicks that sank the baseline. `--temperature` makes repeated attempts differ.
+- A `train` extra (`mlx-vlm[train]`, Apple Silicon only). Verified end to end on
+  an M4 with 16 GB: LoRA on the 4-bit MLX Qwen2.5-VL-3B trains on these rows
+  with full 1280x800 screenshots, using `--grad-checkpoint` and with Ollama's
+  models unloaded. It peaks at 8.9 GB and takes 25-50s per step, about 2,270
+  tokens per example.
 - Key names from models are normalised in `press_key`: "enter", "RETURN" and
   "esc" become "Enter" and "Escape". qwen2.5vl's search failed on
   "unsupported key (key='enter')".
