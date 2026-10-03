@@ -335,3 +335,29 @@ async def test_wait_caps_what_a_model_asks_for():
     assert engine.timeout == WaitTool.max_seconds
     bad = await WaitTool().run(ToolContext(engine=engine), seconds="soon")
     assert not bad.ok
+
+
+async def test_an_unusable_reply_is_recorded_as_the_models_failure():
+    from anybrowser.core.errors import ModelOutputError
+
+    class _Garbled(Planner):
+        async def decide(self, observation, tools):
+            raise ModelOutputError("planner did not return JSON: 'lol'")
+
+    result = await AgentRunner(_Engine(), _Garbled()).run("x")
+    assert result.stop_reason == StopReason.ERROR
+    assert result.error_type == "ModelOutputError"
+
+
+def test_an_empty_reply_at_the_token_limit_is_reported_as_cut_off():
+    """A reasoning model can spend its whole budget thinking. The reply is then
+    empty, and "did not return JSON: ''" blamed the model for our limit."""
+    from anybrowser.agent.llm_planner import LLMPlanner
+    from anybrowser.agent.tools import default_tools
+    from anybrowser.core.errors import ModelOutputError
+
+    planner = LLMPlanner(object(), model="m", max_tokens=2048)  # type: ignore[arg-type]
+    with pytest.raises(ModelOutputError, match=r"cut off after 2048 tokens.*reasoning"):
+        planner._parse("", default_tools(), stop_reason="length")
+    with pytest.raises(ModelOutputError, match="did not return JSON"):
+        planner._parse("I refuse", default_tools(), stop_reason="stop")

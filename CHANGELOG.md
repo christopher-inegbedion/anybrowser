@@ -26,6 +26,29 @@ and a `BREAKING:` entry here.
   and that the judge agrees with the server. claude-sonnet-5 and claude-opus-5.5
   also score +1.000 on 2 seeds per task. The suite tests basic competence and has
   no harder tier yet.
+- Local baselines through Ollama, on 2 seeds per task: qwen3:4b scores +0.938
+  (15 of 16, using `--max-tokens 8192`), and gemma3:1b scores 0.000, because it
+  never produces a usable action.
+- An `error` outcome for attempts where the model server or the browser broke.
+  These attempts are not scored, a report that contains any of them is marked
+  untrustworthy, and the suite stops after three in a row. The first baseline
+  counted a misconfigured endpoint as sixteen honest failures, fitness 0.000,
+  and an evolution loop would have ranked that.
+- `ModelOutputError`, a subclass of `ModelError`, for a model that answered but
+  not in a form the planner can use. `RunResult.error_type` records which
+  exception class ended a run, so the bench counts an unusable reply against
+  the model and excludes only real infrastructure failures.
+- `--max-tokens` for the bench. A reasoning model thinks inside this budget.
+
+### Fixed
+
+- A planner reply that hit the token limit before any visible output was
+  reported as "did not return JSON: ''". It now uses the provider's stop reason
+  and says the reply was cut off. qwen3:4b ran into this on a third of its steps
+  at the default 2048 tokens.
+- The model providers reported a bad constructor argument as the API returning
+  invalid JSON. They now convert `timeout` to a number when constructed, or name
+  the bad value, and only an unparseable response body is called invalid JSON.
 
 ## [0.3.0] - 2026-10-03
 

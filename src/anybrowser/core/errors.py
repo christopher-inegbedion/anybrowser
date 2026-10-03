@@ -21,6 +21,7 @@ __all__ = [
     "EvaluationError",
     "FrameNotFound",
     "ModelError",
+    "ModelOutputError",
     "NavigationError",
     "PermissionDenied",
     "ProtocolError",
@@ -134,3 +135,14 @@ class PermissionDenied(AnyBrowserError):
 
 class ModelError(AnyBrowserError):
     """An LLM provider failed."""
+
+
+class ModelOutputError(ModelError):
+    """The model answered, but not in a form the planner can act on.
+
+    A subclass, so every existing ``except ModelError`` still catches it. It is
+    separate because it is a different fact: the connection worked and the
+    *model* failed. Anything grading a model must count this against it, and
+    must not count a dropped connection the same way -- with one class for
+    both, the bench could do neither.
+    """

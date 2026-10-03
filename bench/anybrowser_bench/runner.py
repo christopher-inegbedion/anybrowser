@@ -42,16 +42,30 @@ class Attempt:
     answer: str
     tools: tuple[str, ...]
 
+    @property
+    def scored(self) -> bool:
+        return self.outcome != Outcome.ERROR.value
+
 
 @dataclass(slots=True)
 class Report:
     attempts: list[Attempt] = field(default_factory=list)
+    #: Why the suite stopped early, if it did.
+    aborted: str = ""
 
     @property
     def fitness(self) -> float:
-        """Mean score in [-1, 1]. 1 is perfect; below 0 means it lies more
-        than it succeeds."""
-        return mean(a.score for a in self.attempts) if self.attempts else 0.0
+        """Mean score in [-1, 1] over the attempts that say something about the
+        agent. 1 is perfect; below 0 means it is wrong more often than right."""
+        scored = [a.score for a in self.attempts if a.scored]
+        return mean(scored) if scored else 0.0
+
+    @property
+    def trustworthy(self) -> bool:
+        """False when errors or an early stop mean the fitness is not comparable
+        to a clean run's. An evolution loop should discard such a report, not
+        rank it."""
+        return not self.aborted and self.count(Outcome.ERROR) == 0
 
     def count(self, outcome: Outcome) -> int:
         return sum(a.outcome == outcome.value for a in self.attempts)
@@ -66,6 +80,9 @@ class Report:
         return json.dumps(
             {
                 "fitness": self.fitness,
+                "trustworthy": self.trustworthy,
+                "aborted": self.aborted,
+                "error": self.count(Outcome.ERROR),
                 "success": self.count(Outcome.SUCCESS),
                 "failed": self.count(Outcome.FAILED),
                 "false_claim": self.count(Outcome.FALSE_CLAIM),
@@ -78,16 +95,26 @@ class Report:
         lines = [f"{'task':<16} {'score':>6}  outcomes"]
         for task_id, attempts in self.by_task().items():
             marks = " ".join(_MARK[a.outcome] for a in attempts)
-            lines.append(f"{task_id:<16} {mean(a.score for a in attempts):>6.2f}  {marks}")
+            scored = [a.score for a in attempts if a.scored]
+            score = f"{mean(scored):>6.2f}" if scored else f"{'-':>6}"
+            lines.append(f"{task_id:<16} {score}  {marks}")
         lines.append(
             f"\nfitness {self.fitness:+.3f}   "
             f"{self.count(Outcome.SUCCESS)} success, {self.count(Outcome.FAILED)} failed, "
-            f"{self.count(Outcome.FALSE_CLAIM)} false claim"
+            f"{self.count(Outcome.FALSE_CLAIM)} false claim, {self.count(Outcome.ERROR)} error"
         )
+        if not self.trustworthy:
+            why = self.aborted or "some attempts errored"
+            lines.append(f"NOT TRUSTWORTHY: {why}. Do not compare this fitness.")
         return "\n".join(lines)
 
 
-_MARK = {"success": "✓", "failed": "·", "false_claim": "✗"}
+#: Errors that are the agent's fault, however the loop reports them. A model
+#: whose reply cannot be parsed has failed the task; the first baseline counted
+#: that as infrastructure and excluded a weak model's every failure.
+_AGENT_ERRORS = frozenset({"ModelOutputError"})
+
+_MARK = {"success": "✓", "failed": "·", "false_claim": "✗", "error": "!"}
 
 
 async def run_suite(
@@ -97,9 +124,16 @@ async def run_suite(
     tasks: Iterable[Task] = ALL_TASKS,
     seeds: Sequence[int] = (0, 1, 2),
     on_attempt: Callable[[Attempt], None] | None = None,
+    max_consecutive_errors: int = 3,
 ) -> Report:
-    """Attempt every task at every seed, sequentially, on one engine."""
+    """Attempt every task at every seed, sequentially, on one engine.
+
+    Stops after ``max_consecutive_errors`` errors in a row: by then the model
+    server or the browser is down, and every further attempt costs time to
+    learn nothing.
+    """
     report = Report()
+    streak = 0
     with BenchServer() as server:
         for task in tasks:
             for seed in seeds:
@@ -107,6 +141,10 @@ async def run_suite(
                 report.attempts.append(attempt)
                 if on_attempt:
                     on_attempt(attempt)
+                streak = streak + 1 if not attempt.scored else 0
+                if max_consecutive_errors and streak >= max_consecutive_errors:
+                    report.aborted = f"{streak} errors in a row, last: {attempt.reason}"
+                    return report
     return report
 
 
@@ -119,21 +157,29 @@ async def _attempt(
     await engine.navigate(root + instance.start)
     try:
         result = await agent(engine, instance.goal)
-    except Exception as exc:  # an agent under evolution may raise anything
-        result = RunResult(goal=instance.goal, stop_reason=StopReason.ERROR, error=repr(exc))
-    verdict = judge(
-        instance,
-        finished=result.stop_reason == StopReason.DONE,
-        answer=result.answer,
-        submissions=server.submissions(root),
-    )
+    except Exception as exc:
+        # The agent's own code raised. Under evolution that is the agent's
+        # fault, and scored as a failure -- unlike StopReason.ERROR below, which
+        # the loop reports when the model or the engine broke underneath it.
+        result = RunResult(goal=instance.goal, stop_reason="agent_raised", error=repr(exc))
+    if result.stop_reason == StopReason.ERROR and result.error_type not in _AGENT_ERRORS:
+        outcome, score, reason = Outcome.ERROR.value, 0.0, f"infrastructure: {result.error}"
+    else:
+        verdict = judge(
+            instance,
+            finished=result.stop_reason == StopReason.DONE,
+            answer=result.answer,
+            submissions=server.submissions(root),
+        )
+        outcome, score = verdict.outcome.value, verdict.score
+        reason = verdict.reason if not result.error else f"{verdict.reason} ({result.error})"
     return Attempt(
         task_id=task.id,
         seed=seed,
         kind=task.kind.value,
-        outcome=verdict.outcome.value,
-        score=verdict.score,
-        reason=verdict.reason if not result.error else f"{verdict.reason} ({result.error})",
+        outcome=outcome,
+        score=score,
+        reason=reason,
         stop_reason=str(result.stop_reason),
         steps=result.step_count,
         seconds=round(time.monotonic() - started, 2),
@@ -143,19 +189,25 @@ async def _attempt(
 
 
 def llm_agent(
-    provider: Any, model: str, *, max_steps: int = 15, screenshots: bool = False
+    provider: Any,
+    model: str,
+    *,
+    max_steps: int = 15,
+    screenshots: bool = False,
+    max_tokens: int = 2048,
 ) -> Agent:
     """The reference agent: :class:`AgentRunner` with an :class:`LLMPlanner`.
 
     A fresh planner per attempt, so nothing leaks from one task into the next.
     Screenshots default to off: every task here is solvable from the page text,
     and images multiply the cost of a suite run. Turn them on to grade the
-    agent as the CLI runs it.
+    agent as the CLI runs it. A reasoning model needs ``max_tokens`` well
+    above the default, or it can spend the budget thinking and never reply.
     """
     from anybrowser.agent import AgentRunner, LLMPlanner, RunConfig
 
     async def run(engine: BrowserEngine, goal: str) -> RunResult:
-        planner = LLMPlanner(provider, model=model)
+        planner = LLMPlanner(provider, model=model, max_tokens=max_tokens)
         config = RunConfig(max_steps=max_steps, include_screenshot=screenshots)
         return await AgentRunner(engine, planner, config=config).run(goal)
 

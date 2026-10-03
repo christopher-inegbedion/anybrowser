@@ -47,6 +47,12 @@ class Outcome(str, Enum):
     FAILED = "failed"
     #: Claimed to be done, and was wrong.
     FALSE_CLAIM = "false_claim"
+    #: The model server or the browser broke, so the attempt says nothing about
+    #: the agent. Not scored: counting it as 0 once graded a misconfigured model
+    #: endpoint as sixteen honest failures, and an evolution loop would have
+    #: selected against whatever variant happened to run while the server was
+    #: down.
+    ERROR = "error"
 
 
 SCORES: Mapping[Outcome, float] = {

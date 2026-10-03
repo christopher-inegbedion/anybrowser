@@ -173,3 +173,91 @@ def test_the_server_serves_pages_and_records_posts_per_instance():
             Submission("submit", {"name": "X Y", "email": "x@y.z", "plan": "Team"})
         ]
         assert server.submissions(root_b) == []
+
+
+# -- infrastructure errors -------------------------------------------------- #
+
+
+class _Page:
+    """Just enough engine for run_suite: it only navigates before each attempt."""
+
+    async def navigate(self, url, **_):
+        return None
+
+
+async def test_a_broken_model_is_an_error_not_an_honest_failure():
+    """The first baseline run graded a misconfigured endpoint as sixteen honest
+    failures, fitness 0.000. An evolution loop would have ranked it."""
+    from anybrowser_bench import run_suite
+
+    from anybrowser.agent import RunResult, StopReason
+
+    async def broken(engine, goal):
+        return RunResult(goal=goal, stop_reason=StopReason.ERROR, error="model unreachable")
+
+    report = await run_suite(broken, _Page(), seeds=(0, 1))
+    assert {a.outcome for a in report.attempts} == {"error"}
+    assert not report.trustworthy
+    assert len(report.attempts) == 3, "should stop after three errors in a row"
+    assert "model unreachable" in report.aborted
+
+
+async def test_errors_do_not_count_toward_fitness():
+    from anybrowser_bench import run_suite
+
+    from anybrowser.agent import RunResult, StopReason
+
+    calls = 0
+
+    async def flaky(engine, goal):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return RunResult(goal=goal, stop_reason=StopReason.ERROR, error="blip")
+        return RunResult(goal=goal, stop_reason="budget_exhausted")
+
+    report = await run_suite(flaky, _Page(), tasks=[task("long-list")], seeds=(0, 1))
+    assert [a.outcome for a in report.attempts] == ["error", "failed"]
+    assert report.fitness == 0.0 and not report.trustworthy
+
+
+async def test_an_agent_that_raises_is_failing_not_erroring():
+    """An evolved agent's own crash is its fault, and must cost it."""
+    from anybrowser_bench import run_suite
+
+    async def crashes(engine, goal):
+        raise RuntimeError("bad mutation")
+
+    report = await run_suite(crashes, _Page(), tasks=[task("long-list")], seeds=(0,))
+    assert report.attempts[0].outcome == "failed"
+    assert "bad mutation" in report.attempts[0].reason
+    assert report.trustworthy
+
+
+def test_a_provider_timeout_given_as_text_is_coerced_or_named():
+    from anybrowser.core.errors import AnyBrowserError
+    from anybrowser.models.openai_compatible import OpenAICompatibleProvider
+
+    assert OpenAICompatibleProvider(api_key="x", timeout="300")._timeout == 300.0
+    with pytest.raises(AnyBrowserError, match="timeout must be a number"):
+        OpenAICompatibleProvider(api_key="x", timeout="soon")
+
+
+async def test_a_model_that_cannot_produce_usable_output_is_failing_not_erroring():
+    """Gemma 1B copied tool schemas into its arguments. That is the model
+    failing the task, and excluding it scored a weak model as untestable."""
+    from anybrowser_bench import run_suite
+
+    from anybrowser.agent import RunResult, StopReason
+
+    async def garbled(engine, goal):
+        return RunResult(
+            goal=goal,
+            stop_reason=StopReason.ERROR,
+            error="planner did not return JSON",
+            error_type="ModelOutputError",
+        )
+
+    report = await run_suite(garbled, _Page(), tasks=[task("long-list")], seeds=(0, 1))
+    assert [a.outcome for a in report.attempts] == ["failed", "failed"]
+    assert report.trustworthy

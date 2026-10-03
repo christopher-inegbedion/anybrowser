@@ -86,7 +86,13 @@ class OpenAICompatibleProvider(ModelProvider):
         self._httpx: Any = httpx
         self._api_key = resolved_key
         self._base_url = base_url.rstrip("/")
-        self._timeout = timeout
+        # Coerced here, where a bad value is the caller's mistake and can be
+        # named, rather than at the first request -- where httpx raised a
+        # TypeError that was reported as the API returning invalid JSON.
+        try:
+            self._timeout = float(timeout)
+        except (TypeError, ValueError) as exc:
+            raise ModelError(f"timeout must be a number of seconds, not {timeout!r}") from exc
         self._image_models = frozenset(image_models or ())
         self.last_usage = Usage()
 
@@ -121,7 +127,6 @@ class OpenAICompatibleProvider(ModelProvider):
                     json=payload,
                 )
                 response.raise_for_status()
-                data: Any = response.json()
         except self._httpx.HTTPStatusError as exc:
             raise ModelError(
                 "OpenAI-compatible API returned an HTTP error",
@@ -129,7 +134,12 @@ class OpenAICompatibleProvider(ModelProvider):
             ) from exc
         except self._httpx.HTTPError as exc:
             raise ModelError("OpenAI-compatible API request failed") from exc
-        except (TypeError, ValueError) as exc:
+        # Parsed outside the request's try, so only a body that is not JSON is
+        # reported as one. A broad catch around the whole request once turned a
+        # bad argument into "returned invalid JSON".
+        try:
+            data: Any = response.json()
+        except ValueError as exc:
             raise ModelError("OpenAI-compatible API returned invalid JSON") from exc
 
         try:

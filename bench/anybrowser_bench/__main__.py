@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,12 +17,23 @@ from .tasks import ALL_TASKS, task
 
 
 def _options(pairs: list[str]) -> dict[str, Any]:
+    """KEY=VALUE pairs, coerced the way the anybrowser CLI coerces them. A
+    timeout passed through as the string "300" once errored every attempt."""
     out: dict[str, Any] = {}
     for pair in pairs:
         key, _, value = pair.partition("=")
-        lowered = value.lower()
-        out[key] = lowered == "true" if lowered in {"true", "false"} else value
+        out[key] = _coerce(value)
     return out
+
+
+def _coerce(value: str) -> Any:
+    lowered = value.strip().lower()
+    if lowered in {"true", "false"}:
+        return lowered == "true"
+    for cast in (int, float):
+        with contextlib.suppress(ValueError):
+            return cast(value)
+    return value
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -36,12 +48,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--task", action="append", default=[], help="Repeatable. Default: all.")
     parser.add_argument("--max-steps", type=int, default=15)
     parser.add_argument("--screenshots", action="store_true")
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=2048,
+        help="Per reply. Raise it for reasoning models, which think inside this budget.",
+    )
     parser.add_argument("--json", type=Path, help="Write the full report here.")
     args = parser.parse_args(argv)
 
     provider = model_registry.get(args.model)(**_options(args.model_option))
     agent = llm_agent(
-        provider, args.model_name, max_steps=args.max_steps, screenshots=args.screenshots
+        provider,
+        args.model_name,
+        max_steps=args.max_steps,
+        screenshots=args.screenshots,
+        max_tokens=args.max_tokens,
     )
     tasks = [task(t) for t in args.task] or list(ALL_TASKS)
     seeds = range(args.seed_offset, args.seed_offset + args.seeds)
@@ -57,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.json:
             args.json.write_text(report.to_json())
             print(f"report: {args.json}")
-        return 0
+        return 0 if report.trustworthy else 2
 
     return asyncio.run(go())
 

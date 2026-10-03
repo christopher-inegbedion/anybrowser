@@ -79,6 +79,9 @@ class RunResult:
     stop_reason: str = StopReason.DONE
     steps: list[Step] = field(default_factory=list)
     error: str = ""
+    #: The exception class behind ``error``, so a caller can tell a model that
+    #: answered badly (``ModelOutputError``) from a model it could not reach.
+    error_type: str = ""
     elapsed: float = 0.0
 
     @property
@@ -142,6 +145,7 @@ class AgentRunner:
                 observation = await self._observe(goal, result.steps, notes, index)
             except AnyBrowserError as exc:
                 result.stop_reason, result.error = StopReason.ERROR, str(exc)
+                result.error_type = type(exc).__name__
                 break
             context.snapshot = observation.snapshot
 
@@ -149,6 +153,7 @@ class AgentRunner:
                 decision = await self._planner.decide(observation, self._tools)
             except AnyBrowserError as exc:
                 result.stop_reason, result.error = StopReason.ERROR, str(exc)
+                result.error_type = type(exc).__name__
                 break
 
             if decision.done:

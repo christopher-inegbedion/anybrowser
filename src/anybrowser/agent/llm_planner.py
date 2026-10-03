@@ -22,7 +22,7 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-from ..core.errors import ModelError
+from ..core.errors import ModelOutputError
 from ..models.provider import ImagePart, Message, ModelProvider, Role
 from .planner import Decision, Observation, Planner
 from .runner import render_history
@@ -67,6 +67,11 @@ reason before choosing.
 not what the action is.
 - Do not claim the goal is done without evidence in the page that it is.\
 """
+
+
+#: Stop reasons meaning "hit the token limit": OpenAI-compatible APIs say
+#: ``length``, Anthropic says ``max_tokens``.
+_LENGTH_STOPS = frozenset({"length", "max_tokens"})
 
 
 class LLMPlanner(Planner):
@@ -202,9 +207,9 @@ class LLMPlanner(Planner):
         )
         self.total_cost_usd += completion.usage.cost_usd
         self.total_tokens += completion.usage.input_tokens + completion.usage.output_tokens
-        return self._parse(completion.text, tools)
+        return self._parse(completion.text, tools, stop_reason=completion.stop_reason)
 
-    def _parse(self, text: str, tools: Sequence[Tool]) -> Decision:
+    def _parse(self, text: str, tools: Sequence[Tool], *, stop_reason: str = "") -> Decision:
         payload = _extract_json(text)
         if payload is None:
             # Distinguish a reply that was cut off from one that was never JSON.
@@ -212,14 +217,22 @@ class LLMPlanner(Planner):
             # simply stops, and reporting that as "did not return JSON" blames
             # the model for a limit we set -- which is what happened: a long
             # narrative ran past 800 tokens and killed the run several steps in.
+            #
+            # The provider's own stop reason is the reliable signal, and the
+            # only one when a reasoning model spends the whole budget thinking:
+            # the visible reply is then empty, and an empty reply does not start
+            # with "{". qwen3:4b did that on a third of its steps, reported as
+            # "did not return JSON: ''".
             stripped = text.strip()
-            if stripped.startswith("{") and not stripped.endswith("}"):
-                raise ModelError(
-                    f"the planner's reply was cut off after {self._max_tokens} tokens; "
-                    "raise max_tokens on LLMPlanner. Partial reply: "
-                    f"{stripped[-120:]!r}"
+            hit_limit = stop_reason in _LENGTH_STOPS
+            if hit_limit or (stripped.startswith("{") and not stripped.endswith("}")):
+                spent = "all of it before replying, likely on reasoning" if not stripped else ""
+                raise ModelOutputError(
+                    f"the planner's reply was cut off after {self._max_tokens} tokens"
+                    f"{'; ' + spent if spent else ''}; raise max_tokens on LLMPlanner. "
+                    f"Partial reply: {stripped[-120:]!r}"
                 )
-            raise ModelError(f"planner did not return JSON: {text[:300]!r}")
+            raise ModelOutputError(f"planner did not return JSON: {text[:300]!r}")
 
         narrative = str(payload.get("narrative") or "").strip()
         if payload.get("done"):
@@ -236,10 +249,12 @@ class LLMPlanner(Planner):
 
         tool = str(payload.get("tool") or "").strip()
         if not tool:
-            raise ModelError(f"planner named no tool: {text[:300]!r}")
+            raise ModelOutputError(f"planner named no tool: {text[:300]!r}")
         known = {t.name for t in tools}
         if tool not in known:
-            raise ModelError(f"planner chose unknown tool {tool!r}; available: {sorted(known)}")
+            raise ModelOutputError(
+                f"planner chose unknown tool {tool!r}; available: {sorted(known)}"
+            )
 
         arguments = payload.get("arguments")
         if not isinstance(arguments, dict):
