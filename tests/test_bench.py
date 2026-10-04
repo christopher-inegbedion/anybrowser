@@ -547,3 +547,183 @@ def test_a_resumed_recording_never_overwrites_an_earlier_one(tmp_path):
     record._ids = __import__("itertools").count()  # a new process: counter from 0
     second = _recorded(tmp_path, "success", [_step("done")])
     assert first != second and first.exists() and second.exists()
+
+
+# -- privileged labels, hindsight, selection --------------------------------- #
+
+
+def _labelled(tmp_path, task_id: str, outcome: str, steps: list[tuple[str, dict, dict | None]]):
+    """A recorded attempt whose steps carry privileged facts.
+
+    ``steps`` is (reply json, privileged facts, engine step or None) per step.
+    """
+    import json
+
+    from anybrowser_bench.record import Exchange, write_attempt
+    from anybrowser_bench.runner import Attempt
+
+    from anybrowser.models.provider import ImagePart, Message, Role
+
+    instance = task(task_id).build(0)
+    trace = tuple(s for _, _, s in steps if s is not None)
+    attempt = Attempt(
+        task_id,
+        0,
+        instance.kind.value,
+        outcome,
+        0.0,
+        "",
+        "done",
+        len(trace),
+        1.0,
+        "",
+        tuple(s["tool"] for s in trace),
+        trace,
+    )
+    exchanges = [
+        Exchange(
+            messages=(
+                Message(role=Role.SYSTEM, text="sys"),
+                Message(
+                    role=Role.USER,
+                    text=f"GOAL: {instance.goal}\nstep {i}",
+                    images=[ImagePart(data=b"png%d" % i)],
+                ),
+            ),
+            options={},
+            reply=json.dumps(reply) if isinstance(reply, dict) else reply,
+        )
+        for i, (reply, _, _) in enumerate(steps)
+    ]
+    return write_attempt(
+        tmp_path, attempt, exchanges, privileged=[facts for _, facts, _ in steps], instance=instance
+    )
+
+
+def _act(tool="click", **arguments):
+    return {"narrative": "n", "done": False, "answer": "", "tool": tool, "arguments": arguments}
+
+
+def _done(answer="x", tool="click", **arguments):
+    return {"narrative": "n", "done": True, "answer": answer, "tool": tool, "arguments": arguments}
+
+
+def _engine_step(tool, changed=True, **arguments):
+    return {
+        "tool": tool,
+        "arguments": arguments,
+        "narrative": "",
+        "ok": True,
+        "changed": changed,
+        "summary": "",
+    }
+
+
+def test_a_screen_showing_the_answer_teaches_finishing_with_the_right_answer(tmp_path):
+    import json
+
+    from anybrowser_bench.dataset import privileged_pairs
+
+    expected = task("canvas-read").build(0).expected
+    _labelled(
+        tmp_path,
+        "canvas-read",
+        "failed",
+        [(_act("wait"), {"goal_reached": True}, _engine_step("wait", changed=False))],
+    )
+    (row,) = [r for r, _ in privileged_pairs([tmp_path])]
+    chosen = json.loads(row["chosen"][-1]["content"])
+    assert row["meta"]["why"] == "label:finish_now"
+    assert chosen["done"] is True and chosen["answer"] == expected
+
+
+def test_finishing_before_the_goal_teaches_the_same_action_without_finishing(tmp_path):
+    """The model wrote "done": true while planning a click -- form-fill's
+    commonest mistake. The better reply is that click, not finished."""
+    import json
+
+    from anybrowser_bench.dataset import privileged_pairs
+
+    _labelled(
+        tmp_path,
+        "form-fill",
+        "false_claim",
+        [(_done("click", "click", x=5, y=6), {"goal_reached": False}, None)],
+    )
+    (row,) = [r for r, _ in privileged_pairs([tmp_path])]
+    chosen = json.loads(row["chosen"][-1]["content"])
+    assert row["meta"]["why"] == "label:not_yet"
+    assert chosen == {
+        "narrative": "n",
+        "done": False,
+        "answer": "",
+        "tool": "click",
+        "arguments": {"x": 5, "y": 6},
+    }
+
+
+def test_a_wrong_answer_on_a_screen_with_the_right_one_is_corrected(tmp_path):
+    from anybrowser_bench.dataset import privileged_pairs
+
+    _labelled(
+        tmp_path, "async-status", "false_claim", [(_done("WP-911"), {"goal_reached": True}, None)]
+    )
+    (row,) = [r for r, _ in privileged_pairs([tmp_path])]
+    assert row["meta"]["why"] == "label:right_answer"
+
+
+def test_an_unlabelled_step_teaches_nothing(tmp_path):
+    """The oracle disagreed with itself across the screenshot: no label."""
+    from anybrowser_bench.dataset import privileged_pairs
+
+    _labelled(
+        tmp_path,
+        "async-status",
+        "failed",
+        [(_act("wait"), {"goal_reached": None}, _engine_step("wait", changed=False))],
+    )
+    assert list(privileged_pairs([tmp_path])) == []
+
+
+def test_a_failed_attempt_still_teaches_what_it_achieved(tmp_path):
+    """Hindsight: the click landed on "Full name", so for the goal 'Click
+    "Full name".' it was right -- and the next step should have finished."""
+    import json
+
+    from anybrowser_bench.dataset import privileged_pairs
+
+    click = _engine_step("click", x=5, y=6)
+    _labelled(
+        tmp_path,
+        "form-fill",
+        "failed",
+        [
+            (
+                _act(x=5, y=6),
+                {
+                    "goal_reached": False,
+                    "target": {"tag": "input", "text": "Full name", "canvas": False},
+                },
+                click,
+            ),
+            (_act("wait"), {"goal_reached": False}, _engine_step("wait", changed=False)),
+        ],
+    )
+    rows = {r["meta"]["why"]: r for r, _ in privileged_pairs([tmp_path])}
+    act, finish = rows["hindsight:act"], rows["hindsight:finish"]
+    assert act["chosen"][1]["content"].startswith('GOAL: Click "Full name".')
+    assert json.loads(act["chosen"][-1]["content"])["done"] is False
+    assert json.loads(finish["chosen"][-1]["content"])["done"] is True
+
+
+def test_selection_keeps_the_best_adapter_not_the_last(tmp_path):
+    import json
+
+    from anybrowser_bench.improve import LoopConfig, _best, _consider
+
+    config = LoopConfig(out=tmp_path)
+    for r, fitness, adapter in [(0, 0.1, "a"), (1, 0.32, "b"), (2, 0.10, "c")]:
+        (tmp_path / f"round-{r:02d}").mkdir()
+        (tmp_path / f"round-{r:02d}" / "eval.json").write_text(json.dumps({"fitness": fitness}))
+        _consider(config, r, Path(adapter))
+    assert _best(config) == (0.32, Path("b"))

@@ -35,6 +35,7 @@ import asyncio
 import contextlib
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -74,9 +75,24 @@ class LoopConfig:
     learning_rate: float = 1e-4
     lora_rank: int = 8
     epochs: int = 2
-    #: "orpo" trains on chosen/rejected pairs at identical states, falling back
-    #: to rebalanced SFT when there are none; "sft" is the first run's method.
-    train_mode: str = "orpo"
+    #: "privileged" trains on pairs labelled by what the bench knew at each step,
+    #: plus hindsight and outcome pairs (dataset.build_privileged); "orpo" on
+    #: outcome pairs only; "sft" on successes only. ORPO-style modes fall back
+    #: to rebalanced SFT when they find no pairs.
+    train_mode: str = "privileged"
+    #: Pairs per round in privileged mode. An ORPO step is ~48s here.
+    max_pairs: int = 60
+    #: The adapter round 0 starts from (and is evaluated as); None is the base.
+    start_adapter: Path | None = None
+    #: Keep the adapter with the best held-out fitness, collect with it, and
+    #: continue training from it rather than from the base. Retraining from the
+    #: base each round let every round land somewhere new: fitness went
+    #: +0.32 -> +0.10 between the last two rounds of the run before this.
+    continue_from_best: bool = True
+    #: When continuing, train on the last N rounds' recordings, not all of them,
+    #: so pairs already learnt are not re-learnt into the ground every round.
+    data_window: int = 2
+    continue_learning_rate: float = 5e-5
     beta: float = 0.1
     max_pairs_per_task: int = 10
     #: An ORPO step on this machine is ~48s (two sequences, uncompiled); this
@@ -202,7 +218,13 @@ async def _bench(
 
 
 def _train(
-    config: LoopConfig, dataset: Path, adapter_dir: Path, rows: int, log: Path, mode: str
+    config: LoopConfig,
+    dataset: Path,
+    adapter_dir: Path,
+    rows: int,
+    log: Path,
+    mode: str,
+    init: Path | None = None,
 ) -> None:
     _unload_ollama()
     iters = max(1, min(rows * config.epochs, config.max_iters))
@@ -219,7 +241,7 @@ def _train(
         "--batch-size",
         "1",
         "--learning-rate",
-        str(config.learning_rate),
+        str(config.continue_learning_rate if init is not None else config.learning_rate),
         "--lora-rank",
         str(config.lora_rank),
         "--lora-alpha",
@@ -239,10 +261,18 @@ def _train(
         "--output-path",
         str(adapter_dir),
     ]
-    if mode == "orpo":
+    if mode in ("orpo", "privileged"):
         command += ["--train-mode", "orpo", "--beta", str(config.beta)]
+    if init is not None:
+        command += ["--adapter-path", str(init)]
     with log.open("a") as sink:
         subprocess.run(command, stdout=sink, stderr=subprocess.STDOUT, check=True)
+    config_file = adapter_dir / "adapter_config.json"
+    if init is not None and not config_file.exists():
+        # Resuming from --adapter-path, mlx-vlm 0.7.4 writes the weights but
+        # not adapter_config.json, and the server then cannot load the result.
+        # The architecture is the starting adapter's, so its config applies.
+        shutil.copyfile(init / "adapter_config.json", config_file)
 
 
 # --------------------------------------------------------------------------- #
@@ -270,50 +300,82 @@ def _summary(report: Any) -> dict[str, Any]:
     }
 
 
+def _best(config: LoopConfig) -> tuple[float, Path | None]:
+    path = config.out / "best.json"
+    if not path.exists():
+        return float("-inf"), None
+    data = json.loads(path.read_text())
+    return float(data["fitness"]), Path(data["adapter"]) if data["adapter"] else None
+
+
+def _consider(config: LoopConfig, r: int, adapter: Path | None) -> None:
+    """Selection: remember the adapter if its held-out fitness is the best yet."""
+    evaluation = config.out / f"round-{r:02d}" / "eval.json"
+    if not evaluation.exists():
+        return
+    fitness = float(json.loads(evaluation.read_text())["fitness"])
+    if fitness > _best(config)[0]:
+        _write(
+            config.out / "best.json",
+            {"fitness": fitness, "adapter": str(adapter) if adapter else None, "round": r},
+        )
+
+
+async def _evaluate(config: LoopConfig, here: Path, adapter: Path | None) -> None:
+    evaluation = here / "eval.json"
+    if evaluation.exists():
+        return
+    with serving(config, adapter, here / "server.log") as url:
+        # Recorded so a regression can be read rather than guessed at. Never
+        # trained on: datasets read round-*/recordings only.
+        report = await _bench(
+            config,
+            url,
+            config.eval_seeds,
+            temperature=0.0,
+            record_to=here / "eval-recordings",
+            log=here / "log.txt",
+        )
+    if not report.trustworthy:
+        raise RuntimeError(f"evaluation untrustworthy: {report.aborted or 'errors'}")
+    _write(evaluation, _summary(report))
+
+
 async def run_round(config: LoopConfig, r: int, adapter: Path | None) -> Path:
-    """One round. Returns the adapter it trained."""
-    from .dataset import build_preferences, build_sft
+    """Evaluate ``adapter``; collect with the best adapter so far; train from it.
+
+    Returns the adapter this round trained, which the next round evaluates.
+    """
+    from .dataset import build_preferences, build_privileged, build_sft
 
     here = config.out / f"round-{r:02d}"
     here.mkdir(parents=True, exist_ok=True)
     log = here / "log.txt"
 
-    evaluation = here / "eval.json"
+    await _evaluate(config, here, adapter)
+    _consider(config, r, adapter)
+    best = _best(config)[1] if config.continue_from_best else adapter
+
     collected = here / "collect.json"
-    if not (evaluation.exists() and collected.exists()):
-        with serving(config, adapter, here / "server.log") as url:
-            if not evaluation.exists():
-                # Recorded so a regression can be read rather than guessed at.
-                # Never trained on: datasets read round-*/recordings only.
-                report = await _bench(
-                    config,
-                    url,
-                    config.eval_seeds,
-                    temperature=0.0,
-                    record_to=here / "eval-recordings",
-                    log=log,
-                )
-                if not report.trustworthy:
-                    raise RuntimeError(f"evaluation untrustworthy: {report.aborted or 'errors'}")
-                _write(evaluation, _summary(report))
-            if not collected.exists():
-                start = r * config.seed_stride
-                seeds = range(start, start + config.collect_seeds)
-                report = await _bench(
-                    config,
-                    url,
-                    seeds,
-                    temperature=config.temperature,
-                    record_to=here / "recordings",
-                    log=log,
-                    repeats=config.repeats,
-                )
-                if report.aborted:
-                    # A browser or server that died mid-collection: stop here,
-                    # so a rerun collects again rather than training on a
-                    # fraction of the round. What was recorded is kept.
-                    raise RuntimeError(f"collection stopped: {report.aborted}")
-                _write(collected, _summary(report))
+    if not collected.exists():
+        with serving(config, best, here / "collect-server.log") as url:
+            start = r * config.seed_stride
+            seeds = range(start, start + config.collect_seeds)
+            report = await _bench(
+                config,
+                url,
+                seeds,
+                temperature=config.temperature,
+                record_to=here / "recordings",
+                log=log,
+                repeats=config.repeats,
+            )
+        if report.aborted:
+            # A browser or server that died mid-collection: stop here, so a
+            # rerun collects again rather than training on a fraction of the
+            # round. What was recorded is kept.
+            raise RuntimeError(f"collection stopped: {report.aborted}")
+        _write(collected, _summary(report))
 
     trained = here / "adapter"
     if not (trained / "adapters.safetensors").exists():
@@ -322,17 +384,23 @@ async def run_round(config: LoopConfig, r: int, adapter: Path | None) -> Path:
             for f in sorted(dataset.rglob("*"), reverse=True):
                 f.unlink() if f.is_file() else f.rmdir()
         recordings = sorted(config.out.glob("round-*/recordings"))
+        if config.continue_from_best and config.data_window > 0:
+            recordings = recordings[-config.data_window :]
         mode, rows = config.train_mode, 0
-        if mode == "orpo":
+        if mode == "privileged":
+            vstats = build_privileged(recordings, dataset, max_pairs=config.max_pairs)
+            _write(here / "dataset.json", {"mode": mode, **asdict(vstats)})
+            rows = vstats.pairs
+        elif mode == "orpo":
             pstats = build_preferences(
                 recordings, dataset, max_pairs_per_task=config.max_pairs_per_task
             )
-            _write(here / "dataset.json", {"mode": "orpo", **asdict(pstats)})
+            _write(here / "dataset.json", {"mode": mode, **asdict(pstats)})
             rows = pstats.pairs
-            if rows == 0:
-                for f in sorted(dataset.rglob("*"), reverse=True):
-                    f.unlink() if f.is_file() else f.rmdir()
-                mode = "sft"
+        if mode != "sft" and rows == 0:
+            for f in sorted(dataset.rglob("*"), reverse=True):
+                f.unlink() if f.is_file() else f.rmdir()
+            mode = "sft"
         if mode == "sft":
             stats = build_sft(
                 recordings,
@@ -345,10 +413,16 @@ async def run_round(config: LoopConfig, r: int, adapter: Path | None) -> Path:
         if rows == 0:
             raise RuntimeError("nothing to train on yet")
         started = time.monotonic()
-        _train(config, dataset, trained, rows, log, mode)
+        init = best if config.continue_from_best else None
+        _train(config, dataset, trained, rows, log, mode, init=init)
         _write(
             here / "train.json",
-            {"mode": mode, "rows": rows, "seconds": time.monotonic() - started},
+            {
+                "mode": mode,
+                "rows": rows,
+                "init": str(init) if init else None,
+                "seconds": time.monotonic() - started,
+            },
         )
     return trained
 
@@ -368,25 +442,16 @@ def _progress(config: LoopConfig) -> list[dict[str, Any]]:
 async def run(config: LoopConfig) -> None:
     config.out.mkdir(parents=True, exist_ok=True)
     _write(config.out / "config.json", {k: str(v) for k, v in asdict(config).items()})
-    adapter: Path | None = None
+    adapter: Path | None = config.start_adapter
     for r in range(config.rounds):
         adapter = await run_round(config, r, adapter)
         _write(config.out / "progress.json", _progress(config))
     # A final evaluation of the last adapter, so the last round's training is
-    # measured too, not just collected from.
+    # measured too, not just collected from -- and can still be selected.
     final = config.out / f"round-{config.rounds:02d}"
     final.mkdir(exist_ok=True)
-    if not (final / "eval.json").exists():
-        with serving(config, adapter, final / "server.log") as url:
-            report = await _bench(
-                config,
-                url,
-                config.eval_seeds,
-                temperature=0.0,
-                record_to=final / "eval-recordings",
-                log=final / "log.txt",
-            )
-            _write(final / "eval.json", _summary(report))
+    await _evaluate(config, final, adapter)
+    _consider(config, config.rounds, adapter)
     _write(config.out / "progress.json", _progress(config))
 
 
@@ -418,7 +483,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--collect-seeds", type=int, default=3)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--eval-seeds", type=int, nargs="+", default=[1000, 1001, 1002, 1003, 1004])
-    parser.add_argument("--train-mode", choices=["orpo", "sft"], default="orpo")
+    parser.add_argument("--train-mode", choices=["privileged", "orpo", "sft"], default="privileged")
+    parser.add_argument("--start-adapter", type=Path, default=None)
+    parser.add_argument(
+        "--from-base",
+        action="store_true",
+        help="Train each round from the base weights on all data (the earlier method).",
+    )
+    parser.add_argument("--max-pairs", type=int, default=60)
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
@@ -431,6 +503,9 @@ def main(argv: list[str] | None = None) -> int:
         collect_seeds=args.collect_seeds,
         repeats=args.repeats,
         train_mode=args.train_mode,
+        start_adapter=args.start_adapter,
+        continue_from_best=not args.from_base,
+        max_pairs=args.max_pairs,
         eval_seeds=tuple(args.eval_seeds),
         temperature=args.temperature,
         epochs=args.epochs,
@@ -449,6 +524,8 @@ def main(argv: list[str] | None = None) -> int:
             f"trained ({entry.get('train', {}).get('mode', '-')}) on "
             f"{entry.get('train', {}).get('rows', '-')} examples"
         )
+    fitness, adapter = _best(config)
+    print(f"best: {fitness:+.3f} -- {adapter or 'the base model'}")
     return 0
 
 

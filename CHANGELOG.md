@@ -82,6 +82,29 @@ and a `BREAKING:` entry here.
   `improve` now trains with ORPO by default and falls back to rebalanced SFT
   (`max_per_task`, `max_done_share`) when there are no pairs. It also evaluates
   on 5 held-out seeds and records evaluations without training on them.
+- Training from what the bench knows at each step
+  (`anybrowser_bench.privileged`). While collecting training data, never while
+  evaluating, each step records two facts:
+  - `goal_reached`: should the agent finish now? That is, the answer is on
+    screen (a text node inside the viewport, not merely in the DOM), the server
+    has the right submission, or the task is the impossible one.
+  - `target`: what a click or a typed field landed on.
+
+  The oracle is probed before and after the screenshot, and a step is labelled
+  only when the two agree, so a result arriving mid-observation cannot teach
+  guessing. `dataset.build_privileged` turns this into three kinds of pair:
+  - label pairs: every wrong finish decision, both finishing too early and too
+    late, plus wrong answers on a screen that showed the right one;
+  - hindsight pairs: a failed attempt's action that changed the page becomes a
+    solved goal such as `Click "Full name".`, act then finish;
+  - the existing outcome pairs.
+
+  All are balanced and capped at 60 per round.
+- `improve` keeps the best adapter by held-out fitness instead of the last
+  (`best.json`). It collects with that adapter and continues training from it,
+  at a lower learning rate, on the last two rounds' data. `--start-adapter`
+  seeds a run from an earlier one. Retraining from the base each round had let
+  fitness go from +0.32 to +0.10 between consecutive rounds.
 - `anybrowser_bench.mlx_train`, which runs `mlx_vlm.lora` with two runtime
   fixes needed to train Qwen2.5-VL with ORPO in mlx-vlm 0.7.4. Its preference
   dataset dropped `image_grid_thw`, and its training step is `mx.compile`d while

@@ -17,10 +17,11 @@ from pathlib import Path
 from statistics import mean
 from typing import Any
 
-from anybrowser.agent import RunResult, StopReason
+from anybrowser.agent import AgentRunner, RunResult, StopReason
 from anybrowser.core.engine import BrowserEngine
 from anybrowser.models.provider import ModelProvider
 
+from .privileged import ORACLE, describe_point, make_oracle
 from .record import Exchange, RecordedRun, RecordingProvider, SeedingProvider, write_attempt
 from .server import BenchServer
 from .task import Instance, Outcome, Task, judge
@@ -155,10 +156,14 @@ async def run_suite(
     with BenchServer() as server:
         for task in tasks:
             for seed in [s for s in seeds for _ in range(max(1, repeats))]:
-                attempt, exchanges = await _attempt(agent, engine, server, task, seed)
+                attempt, exchanges, privileged, instance = await _attempt(
+                    agent, engine, server, task, seed
+                )
                 report.attempts.append(attempt)
                 if record_to is not None and exchanges:
-                    write_attempt(record_to, attempt, exchanges)
+                    write_attempt(
+                        record_to, attempt, exchanges, privileged=privileged, instance=instance
+                    )
                 if on_attempt:
                     on_attempt(attempt)
                 streak = streak + 1 if not attempt.scored else 0
@@ -170,7 +175,7 @@ async def run_suite(
 
 async def _attempt(
     agent: Agent, engine: BrowserEngine, server: BenchServer, task: Task, seed: int
-) -> tuple[Attempt, list[Exchange]]:
+) -> tuple[Attempt, list[Exchange], list[dict[str, Any]], Instance]:
     instance = task.build(seed)
     root = server.mount(instance)
     started = time.monotonic()
@@ -186,7 +191,8 @@ async def _attempt(
             error=f"could not open the task page: {exc!r}",
             error_type=type(exc).__name__,
         )
-        return _attempt_record(task, seed, started, result, None, server, root), []
+        return _attempt_record(task, seed, started, result, None, server, root), [], [], instance
+    oracle = ORACLE.set(make_oracle(instance, server, root))
     try:
         result = await agent(engine, instance.goal)
     except Exception as exc:
@@ -194,8 +200,15 @@ async def _attempt(
         # fault, and scored as a failure -- unlike StopReason.ERROR below, which
         # the loop reports when the model or the engine broke underneath it.
         result = RunResult(goal=instance.goal, stop_reason="agent_raised", error=repr(exc))
+    finally:
+        ORACLE.reset(oracle)
     attempt = _attempt_record(task, seed, started, result, instance, server, root)
-    return attempt, list(getattr(result, "exchanges", ()))
+    return (
+        attempt,
+        list(getattr(result, "exchanges", ())),
+        list(getattr(result, "privileged", ())),
+        instance,
+    )
 
 
 def _attempt_record(
@@ -245,6 +258,48 @@ def _attempt_record(
     )
 
 
+class _PrivilegedRunner(AgentRunner):
+    """AgentRunner that records, beside each step, what the bench knew.
+
+    The oracle is asked before *and* after the observation, and a step is
+    labelled only when the two agree. A result landing between the probe and
+    the screenshot would otherwise label a screen "answer visible" that the
+    model saw without it -- which trains guessing -- or the reverse.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.privileged: list[dict[str, Any]] = []
+
+    async def _probe(self) -> dict[str, Any]:
+        oracle = ORACLE.get()
+        if oracle is None:
+            return {}
+        try:
+            return dict(await oracle(self._engine))
+        except Exception:
+            return {}
+
+    async def _observe(self, goal: str, history: Any, notes: Any, index: int) -> Any:
+        before = await self._probe()
+        observation = await super()._observe(goal, history, notes, index)
+        after = await self._probe()
+        reached = before.get("goal_reached")
+        facts: dict[str, Any] = {
+            "goal_reached": reached if reached == after.get("goal_reached") else None
+        }
+        self.privileged.append(facts)
+        return observation
+
+    async def _act(self, context: Any, decision: Any) -> Any:
+        arguments = dict(decision.arguments)
+        if self.privileged and "x" in arguments and "y" in arguments:
+            self.privileged[-1]["target"] = await describe_point(
+                self._engine, arguments["x"], arguments["y"]
+            )
+        return await super()._act(context, decision)
+
+
 def llm_agent(
     provider: Any,
     model: str,
@@ -290,7 +345,8 @@ def llm_agent(
                 temperature=temperature,
             )
             config = RunConfig(max_steps=max_steps, include_screenshot=True)
-            runner = AgentRunner(engine, planner, tools=vision_tools(), config=config)
+            runner_cls = _PrivilegedRunner if record else AgentRunner
+            runner = runner_cls(engine, planner, tools=vision_tools(), config=config)
         else:
             planner = LLMPlanner(
                 source,
@@ -300,11 +356,12 @@ def llm_agent(
                 temperature=temperature,
             )
             config = RunConfig(max_steps=max_steps, include_screenshot=screenshots)
-            runner = AgentRunner(engine, planner, config=config)
+            runner = (_PrivilegedRunner if record else AgentRunner)(engine, planner, config=config)
         result = await runner.run(goal)
         if isinstance(source, RecordingProvider):
             recorded = RecordedRun(**{f: getattr(result, f) for f in _RUN_FIELDS})
             recorded.exchanges = source.exchanges
+            recorded.privileged = getattr(runner, "privileged", [])
             return recorded
         return result
 

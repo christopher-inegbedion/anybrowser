@@ -39,8 +39,10 @@ __all__ = [
     "DatasetStats",
     "PreferenceStats",
     "build_preferences",
+    "build_privileged",
     "build_sft",
     "preference_pairs",
+    "privileged_pairs",
     "training_rows",
 ]
 
@@ -438,3 +440,304 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+# --------------------------------------------------------------------------- #
+# Privileged labels and hindsight                                              #
+# --------------------------------------------------------------------------- #
+#
+# Outcome pairs need two attempts to reach the identical screen and then
+# diverge: 30-50 pairs from 90 attempts. With what the bench knew at each step
+# (anybrowser_bench.privileged) every recorded screen carries the right answer
+# to "should I finish now?", so every wrong finish decision becomes a pair --
+# from failed attempts too, and on tasks never solved.
+
+#: Arguments a vision tool cannot run without; a counterfactual action missing
+#: them is not offered as the better reply.
+_REQUIRED = {
+    "click": ("x", "y"),
+    "type_text": ("text",),
+    "press_key": ("key",),
+    "navigate": ("url",),
+    "scroll": (),
+    "wait": (),
+}
+
+
+def _reply(
+    narrative: str,
+    *,
+    done: bool,
+    answer: str = "",
+    tool: str = "wait",
+    arguments: dict[str, Any] | None = None,
+) -> str:
+    # Key order as the constrained schema has it (llm_planner.decision_schema).
+    return json.dumps(
+        {
+            "narrative": narrative,
+            "done": done,
+            "answer": answer,
+            "tool": tool,
+            "arguments": arguments or {},
+        }
+    )
+
+
+def _finish(instance: dict[str, Any]) -> str:
+    """The right final reply, written from what the judge accepts."""
+    if instance["kind"] == "impossible":
+        return _reply("The item is not listed on the page.", done=True, answer="NOT FOUND")
+    if instance["kind"] == "state":
+        return _reply("The page shows the goal has been completed.", done=True, answer="Done.")
+    expected = instance["expected"]
+    return _reply(
+        f"The page shows {expected}, which is what the goal asks for.", done=True, answer=expected
+    )
+
+
+def _parsed(text: str) -> dict[str, Any] | None:
+    try:
+        value = json.loads(text)
+    except ValueError:
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _answer_right(instance: dict[str, Any], answer: str) -> bool:
+    from .task import Instance, Kind, judge
+
+    kind = Kind(instance["kind"])
+    probe = Instance(goal="", pages={}, kind=kind, expected=instance["expected"])
+    if kind is Kind.STATE:
+        return True  # the server decides those; the oracle already said so
+    return judge(probe, finished=True, answer=answer, submissions=[]).outcome.value == "success"
+
+
+def _with_goal(messages: list[dict[str, Any]], goal: str) -> list[dict[str, Any]]:
+    """The same prompt, asking for ``goal`` instead."""
+    out = []
+    for m in messages:
+        text = m["content"]
+        if m["role"] == "user" and text.startswith("GOAL: "):
+            text = f"GOAL: {goal}" + text[text.index("\n") :] if "\n" in text else f"GOAL: {goal}"
+        out.append({"role": m["role"], "content": text})
+    return out
+
+
+def _hindsight_goal(step: dict[str, Any], target: dict[str, Any] | None) -> str:
+    """The goal a step that changed the page in fact achieved, or ""."""
+    if not (step["ok"] and step["changed"]) or not target or target.get("canvas"):
+        return ""
+    name = str(target.get("text") or "").strip()
+    if step["tool"] == "click" and name:
+        return f'Click "{name}".'
+    if step["tool"] == "type_text":
+        typed = str(step["arguments"].get("text") or "")
+        if not typed:
+            return ""
+        return f'Type "{typed}" into the "{name}" field.' if name else f'Type "{typed}".'
+    return ""
+
+
+def privileged_pairs(
+    roots: Iterable[Path], stats: PreferenceStats | None = None
+) -> Iterator[tuple[dict[str, Any], list[Path]]]:
+    """Label pairs and hindsight pairs from recordings that carry privileged
+    facts. Recordings without them (older runs) contribute nothing here."""
+    stats = stats if stats is not None else PreferenceStats()
+
+    def pair(
+        prompt: list[dict[str, Any]],
+        chosen: str,
+        rejected: str,
+        images: list[Path],
+        meta: dict[str, Any],
+    ) -> tuple[dict[str, Any], list[Path]]:
+        stats.pairs += 1
+        stats.by_reason[meta["why"]] = stats.by_reason.get(meta["why"], 0) + 1
+        return (
+            {
+                "chosen": [*prompt, {"role": "assistant", "content": chosen}],
+                "rejected": [*prompt, {"role": "assistant", "content": rejected}],
+                "meta": meta,
+            },
+            images,
+        )
+
+    for attempt_dir in _attempt_dirs(roots):
+        attempt = json.loads((attempt_dir / "attempt.json").read_text())
+        instance = attempt.get("instance")
+        if instance is None or attempt["outcome"] == "error":
+            continue
+        stats.attempts += 1
+        steps = []
+        for step_path in sorted(attempt_dir.glob("step-[0-9][0-9].json")):
+            record = json.loads(step_path.read_text())
+            images = [attempt_dir / n for m in record["messages"] for n in m["images"]]
+            prompt = [{"role": m["role"], "content": m["text"]} for m in record["messages"]]
+            steps.append((step_path.stem, record, images, prompt))
+
+        for name, record, images, prompt in steps:
+            facts = record.get("privileged") or {}
+            reached = facts.get("goal_reached")
+            reply = _parsed(record["reply"])
+            if reply is None or reached is None:
+                continue
+            stats.states += 1
+            finished = reply.get("done") is True
+            base = {"task": attempt["task_id"], "seed": attempt["seed"], "step": name}
+            if reached and not finished:
+                yield pair(
+                    prompt,
+                    _finish(instance),
+                    record["reply"],
+                    images,
+                    {
+                        **base,
+                        "chosen_tool": "done",
+                        "rejected_tool": str(reply.get("tool")),
+                        "why": "label:finish_now",
+                    },
+                )
+            elif reached and finished and not _answer_right(instance, str(reply.get("answer"))):
+                yield pair(
+                    prompt,
+                    _finish(instance),
+                    record["reply"],
+                    images,
+                    {
+                        **base,
+                        "chosen_tool": "done",
+                        "rejected_tool": "done",
+                        "why": "label:right_answer",
+                    },
+                )
+            elif not reached and finished:
+                tool = str(reply.get("tool"))
+                arguments = reply.get("arguments") or {}
+                if tool in _REQUIRED and all(k in arguments for k in _REQUIRED[tool]):
+                    # Its own intended action, without the premature finish.
+                    acting = _reply(
+                        str(reply.get("narrative") or ""),
+                        done=False,
+                        tool=tool,
+                        arguments=dict(arguments),
+                    )
+                    yield pair(
+                        prompt,
+                        acting,
+                        record["reply"],
+                        images,
+                        {
+                            **base,
+                            "chosen_tool": tool,
+                            "rejected_tool": "done",
+                            "why": "label:not_yet",
+                        },
+                    )
+
+        if attempt["outcome"] == "success":
+            continue  # hindsight is for attempts that missed their own goal
+        for k, (name, record, images, prompt) in enumerate(steps):
+            step = record.get("step")
+            if not step or step["tool"] == "done":
+                continue
+            goal = _hindsight_goal(step, (record.get("privileged") or {}).get("target"))
+            if not goal:
+                continue
+            base = {
+                "task": attempt["task_id"],
+                "seed": attempt["seed"],
+                "step": name,
+                "hindsight_goal": goal,
+            }
+            reply = _parsed(record["reply"]) or {}
+            acting = _reply(
+                str(reply.get("narrative") or ""),
+                done=False,
+                tool=step["tool"],
+                arguments=dict(step["arguments"]),
+            )
+            premature = _reply("The goal is complete.", done=True, answer="Done.")
+            yield pair(
+                _with_goal(prompt, goal),
+                acting,
+                premature,
+                images,
+                {
+                    **base,
+                    "chosen_tool": step["tool"],
+                    "rejected_tool": "done",
+                    "why": "hindsight:act",
+                },
+            )
+            if k + 1 < len(steps):
+                after_name, after, after_images, after_prompt = steps[k + 1]
+                if (_parsed(after["reply"]) or {}).get("done") is not True:
+                    finish = _reply("That is done: the page shows it.", done=True, answer="Done.")
+                    yield pair(
+                        _with_goal(after_prompt, goal),
+                        finish,
+                        after["reply"],
+                        after_images,
+                        {
+                            **base,
+                            "step": after_name,
+                            "chosen_tool": "done",
+                            "rejected_tool": str((_parsed(after["reply"]) or {}).get("tool")),
+                            "why": "hindsight:finish",
+                        },
+                    )
+
+
+def build_privileged(
+    roots: Iterable[Path],
+    out: Path,
+    *,
+    max_pairs: int = 60,
+    max_acting_per_finishing: float | None = 2.0,
+) -> PreferenceStats:
+    """Label, hindsight and outcome pairs together, balanced, at most
+    ``max_pairs`` (an ORPO step is ~48s on the reference machine).
+
+    Selection is round-robin over (reason, task), so neither the commonest
+    mistake nor the commonest task fills the set.
+    """
+    roots = list(roots)
+    stats = PreferenceStats()
+    rows = list(privileged_pairs(roots, stats))
+    outcome_stats = PreferenceStats()
+    rows += list(preference_pairs(roots, outcome_stats))
+    for reason, n in outcome_stats.by_reason.items():
+        stats.by_reason[reason] = stats.by_reason.get(reason, 0) + n
+    seen: set[tuple[str, str, str]] = set()
+    unique = []
+    for row, images in rows:
+        key = (
+            json.dumps(row["chosen"][:-1]),
+            row["chosen"][-1]["content"],
+            row["rejected"][-1]["content"],
+        )
+        if key not in seen:
+            seen.add(key)
+            unique.append((row, images))
+    balanced = (
+        unique
+        if max_acting_per_finishing is None
+        else _balance_finishing(unique, max_acting_per_finishing)
+    )
+    rng = Random(0)
+    buckets: dict[tuple[str, str], list[tuple[dict[str, Any], list[Path]]]] = {}
+    for item in balanced:
+        meta = item[0]["meta"]
+        buckets.setdefault((meta["why"], meta["task"]), []).append(item)
+    queues = [rng.sample(q, len(q)) for q in buckets.values()]
+    chosen: list[tuple[dict[str, Any], list[Path]]] = []
+    while len(chosen) < max_pairs and any(queues):
+        for q in queues:
+            if q and len(chosen) < max_pairs:
+                chosen.append(q.pop())
+    stats.dropped_to_balance = len(rows) - len(chosen)
+    stats.pairs = _write_rows(chosen, out, "train.jsonl")
+    return stats

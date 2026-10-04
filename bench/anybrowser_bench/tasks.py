@@ -351,6 +351,7 @@ def _canvas_read(rng: Random) -> Instance:
         goal=f"What is {players[target]}'s high score?",
         pages={"index.html": _canvas_page("High scores", script)},
         expected=scores[target],
+        answer_visibility="always",
         decoys=tuple(s for i, s in enumerate(scores) if i != target),
     )
 

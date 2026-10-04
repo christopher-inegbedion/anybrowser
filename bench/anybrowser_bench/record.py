@@ -45,6 +45,9 @@ class RecordedRun(RunResult):
     """A RunResult that also carries the model exchanges behind it."""
 
     exchanges: list[Exchange] = field(default_factory=list)
+    #: Per step, aligned with ``exchanges``: what the bench knew and the agent
+    #: did not (see anybrowser_bench.privileged). Training data only.
+    privileged: list[dict[str, Any]] = field(default_factory=list)
 
 
 class RecordingProvider(ModelProvider):
@@ -131,7 +134,14 @@ class SeedingProvider(ModelProvider):
 _ids = itertools.count()
 
 
-def write_attempt(root: Path, attempt: Any, exchanges: Sequence[Exchange]) -> Path:
+def write_attempt(
+    root: Path,
+    attempt: Any,
+    exchanges: Sequence[Exchange],
+    *,
+    privileged: Sequence[Mapping[str, Any]] = (),
+    instance: Any = None,
+) -> Path:
     """Write one attempt's exchanges and outcome. Returns its directory."""
     # The counter restarts with the process, so a resumed collection would
     # collide with the directories its interrupted run left behind. Take the
@@ -144,6 +154,15 @@ def write_attempt(root: Path, attempt: Any, exchanges: Sequence[Exchange]) -> Pa
         except FileExistsError:
             continue
     summary = asdict(attempt)
+    if instance is not None:
+        # What a dataset builder needs to write a correct reply or restate a
+        # goal: the goal, and the answer the judge would accept.
+        summary["instance"] = {
+            "goal": instance.goal,
+            "kind": instance.kind.value,
+            "expected": instance.expected,
+            "expected_fields": dict(instance.expected_fields),
+        }
     (where / "attempt.json").write_text(json.dumps(summary, indent=2))
     for index, exchange in enumerate(exchanges):
         messages = []
@@ -165,6 +184,7 @@ def write_attempt(root: Path, attempt: Any, exchanges: Sequence[Exchange]) -> Pa
                     # What the engine said this step did; None when the reply
                     # never became an action (unparseable, or the run ended).
                     "step": step,
+                    "privileged": dict(privileged[index]) if index < len(privileged) else None,
                 },
                 indent=2,
             )

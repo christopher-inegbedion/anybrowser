@@ -94,6 +94,11 @@ class Instance:
     #: STATE: the form path and fields the server must have received last.
     expected_path: str = "submit"
     expected_fields: Mapping[str, str] = field(default_factory=dict)
+    #: How the bench tells, during training-data collection, that an answer
+    #: is on screen (see anybrowser_bench.privileged). "dom": the value is in
+    #: a text node inside the viewport. "always": drawn where the DOM cannot
+    #: see it, and on screen from the start -- a canvas.
+    answer_visibility: str = "dom"
 
 
 @dataclass(frozen=True, slots=True)
