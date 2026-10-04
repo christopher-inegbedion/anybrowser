@@ -90,6 +90,13 @@ and a `BREAKING:` entry here.
 
 ### Fixed (bench)
 
+- Preference datasets now balance the chosen side
+  (`build_preferences(max_acting_per_finishing=2.0)`). ORPO's loss includes
+  plain likelihood on every chosen reply. In the first ORPO run, 41 of 49 chosen
+  replies said `"done": false`, and by round 4 the model would not finish even
+  canvas-read ("the high score is not visible", with the score on screen), a
+  task it had passed 5/5 since round 0. Rebuilt with the cap, the same
+  recordings give 24 pairs: 8 that finish and 16 that act, across 9 tasks.
 - `async-status` and `delayed-search` did not test waiting. Their results
   arrived 1.2-2.5s after the action, which is shorter than one agent step
   (8-9s), so any second action, even a scroll that did nothing, passed for

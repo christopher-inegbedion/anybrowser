@@ -501,3 +501,23 @@ def test_async_results_take_longer_than_an_agent_step(task_id):
         assert ms >= 12_000, f"{task_id} delivers in {ms}ms, inside one agent step"
         delays.add(ms)
     assert len(delays) > 5, "a fixed delay can be learned as a step count"
+
+
+def test_preferences_keep_the_chosen_side_from_saying_keep_going_by_default(tmp_path):
+    """ORPO trains on every chosen reply. 41 of 49 chosen replies saying
+    "done": false taught a model to stop finishing anything at all."""
+    import json
+
+    from anybrowser_bench.dataset import build_preferences
+
+    rec = tmp_path / "rec"
+    for i in range(6):  # six states where acting on beat a premature finish
+        _scored(rec, "false_claim", [_step("done", reply=f'{{"done": true, "n": {i}}}')], -1.0)
+        _scored(rec, "failed", [_step("wait", reply=f'{{"tool": "wait", "n": {i}}}')], 0.0)
+        # different states: vary the user message via a distinct first step
+    stats = build_preferences([rec], tmp_path / "ds")
+    rows = [json.loads(line) for line in (tmp_path / "ds" / "train.jsonl").open()]
+    chosen_done = sum(r["meta"]["chosen_tool"] == "done" for r in rows)
+    acting = len(rows) - chosen_done
+    assert acting <= 2 * max(chosen_done, 0)
+    assert stats.pairs == len(rows)

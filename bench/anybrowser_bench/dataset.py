@@ -208,6 +208,7 @@ class PreferenceStats:
     states: int = 0
     contested: int = 0
     pairs: int = 0
+    dropped_to_balance: int = 0
     by_reason: dict[str, int] = field(default_factory=dict)
 
     def summary(self) -> str:
@@ -349,14 +350,57 @@ def preference_pairs(
             yield row, list(best.images)
 
 
+def _balance_finishing(
+    rows: list[tuple[dict[str, Any], list[Path]]], max_ratio: float
+) -> list[tuple[dict[str, Any], list[Path]]]:
+    """Cap pairs whose chosen reply keeps acting at ``max_ratio`` x those whose
+    chosen reply finishes.
+
+    ORPO is not only a comparison: its loss includes plain likelihood on every
+    chosen reply, so the chosen side is also an SFT set. In the first ORPO run
+    41 of 49 chosen replies said ``"done": false``. The model learned "keep
+    going" as a prior, and by round 4 it would not finish even canvas-read --
+    "the high score is not visible", with the score on screen -- which it had
+    passed 5/5 since round 0. The same imbalance as the success-only run, the
+    other way round. Deterministic, and round-robin over tasks so the cut does
+    not empty one task first.
+    """
+    finishing = [r for r in rows if r[0]["meta"]["chosen_tool"] == "done"]
+    acting = [r for r in rows if r[0]["meta"]["chosen_tool"] != "done"]
+    allowed = int(max_ratio * len(finishing))
+    if len(acting) <= allowed:
+        return rows
+    by_task: dict[str, list[tuple[dict[str, Any], list[Path]]]] = {}
+    for r in acting:
+        by_task.setdefault(r[0]["meta"]["task"], []).append(r)
+    rng = Random(0)
+    queues = [rng.sample(q, len(q)) for q in by_task.values()]
+    kept: list[tuple[dict[str, Any], list[Path]]] = []
+    while len(kept) < allowed and any(queues):
+        for q in queues:
+            if q and len(kept) < allowed:
+                kept.append(q.pop())
+    return finishing + kept
+
+
 def build_preferences(
-    roots: Iterable[Path], out: Path, *, max_pairs_per_task: int | None = None
+    roots: Iterable[Path],
+    out: Path,
+    *,
+    max_pairs_per_task: int | None = None,
+    max_acting_per_finishing: float | None = 2.0,
 ) -> PreferenceStats:
     """Write ``out/train.jsonl`` in the shape ``mlx_vlm.lora --train-mode orpo``
     loads: ``chosen`` and ``rejected`` conversations sharing one prompt and
-    screenshot."""
+    screenshot. ``max_acting_per_finishing`` balances the chosen side; see
+    :func:`_balance_finishing`."""
     stats = PreferenceStats()
     rows = list(preference_pairs(roots, stats, max_pairs_per_task=max_pairs_per_task))
+    if max_acting_per_finishing is not None:
+        balanced = _balance_finishing(rows, max_acting_per_finishing)
+        stats.dropped_to_balance = len(rows) - len(balanced)
+        stats.pairs = len(balanced)
+        rows = balanced
     _write_rows(rows, out, "train.jsonl")
     return stats
 
