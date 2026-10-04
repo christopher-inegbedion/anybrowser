@@ -17,7 +17,7 @@ from random import Random
 
 from .task import NOT_FOUND, Instance, Kind, Task
 
-__all__ = ["ALL_TASKS", "task"]
+__all__ = ["ALL_TASKS", "ASYNC_DELAY_MS", "task"]
 
 _ADJECTIVES = (
     "amber", "brisk", "cobalt", "dusky", "ember", "fallow", "gilded", "hollow",
@@ -37,6 +37,12 @@ _LAST = (
     "Achebe", "Brandt", "Castillo", "Dimitrov", "Eze", "Fischer", "Gallo", "Haddad",
     "Ivanova", "Jensen", "Kowalski", "Laine", "Moreau", "Nakamura", "Okafor", "Petrov",
 )  # fmt: skip
+
+
+#: How long the async tasks take to deliver, in ms. An agent step on the
+#: reference hardware is 8-9s, so the floor is above one step and the spread
+#: is more than one step wide.
+ASYNC_DELAY_MS = (12_000, 25_000)
 
 
 def _page(title: str, body: str) -> str:
@@ -72,7 +78,11 @@ def _products(rng: Random, count: int) -> list[tuple[str, str]]:
 
 def _async_status(rng: Random) -> Instance:
     build = _code(rng)
-    delay = rng.randint(1500, 2500)
+    # Longer than an agent step, and varying. At 1.5-2.5s the result had always
+    # landed before the next screenshot, so any second action -- a scroll that
+    # did nothing -- passed for waiting. Now only a wait, or looking again more
+    # than once, gets there, and the agent cannot learn a fixed step count.
+    delay = rng.randint(*ASYNC_DELAY_MS)
     body = (
         "<h1>Deployment console</h1>"
         "<button id='go'>Deploy</button>"
@@ -236,7 +246,7 @@ def _delayed_search(rng: Random) -> Instance:
     matches = [d for d in docs if query_word in d[0].lower()]
     first_code = matches[0][1]
     data = ",".join(f"['{t}','{c}']" for t, c in docs)
-    delay = rng.randint(1200, 2000)
+    delay = rng.randint(*ASYNC_DELAY_MS)  # see _async_status
     body = (
         "<h1>Document search</h1>"
         "<form id='f'><input id='q' name='q' placeholder='Search documents'> "

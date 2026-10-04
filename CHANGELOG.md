@@ -90,6 +90,13 @@ and a `BREAKING:` entry here.
 
 ### Fixed (bench)
 
+- `async-status` and `delayed-search` did not test waiting. Their results
+  arrived 1.2-2.5s after the action, which is shorter than one agent step
+  (8-9s), so any second action, even a scroll that did nothing, passed for
+  waiting. The trained model learned exactly that. Both now deliver after
+  12-25s (`ASYNC_DELAY_MS`), which is longer than a step and varies by more
+  than a step, so only waiting or looking again more than once gets there.
+  Scores on these two tasks from before this change are not comparable.
 - An overnight self-improvement run stopped for about two hours at a training
   step, at 2% CPU. The power log showed "Wake from Deep Idle": the Mac had gone
   to sleep, and the GPU, the model server and Chrome went with it.

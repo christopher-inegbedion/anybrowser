@@ -485,3 +485,19 @@ async def test_sampling_sends_a_fresh_seed_with_every_request():
     for _ in range(3):
         await provider.complete([Message(role=Role.USER, text="hi")], model="m")
     assert seen == [7, 8, 9]
+
+
+@pytest.mark.parametrize("task_id", ["async-status", "delayed-search"])
+def test_async_results_take_longer_than_an_agent_step(task_id):
+    """With a 1.5-2.5s delay the result was always there by the next
+    screenshot, so a scroll that did nothing passed for waiting -- the trained
+    model learned exactly that. The delay must outlast a step (8-9s), and vary."""
+    import re
+
+    delays = set()
+    for seed in range(10):
+        html = task(task_id).build(seed).pages["index.html"]
+        (ms,) = [int(m) for m in re.findall(r"\},(\d{4,6})\)", html)]
+        assert ms >= 12_000, f"{task_id} delivers in {ms}ms, inside one agent step"
+        delays.add(ms)
+    assert len(delays) > 5, "a fixed delay can be learned as a step count"
