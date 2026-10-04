@@ -639,6 +639,13 @@ def privileged_pairs(
 
         if attempt["outcome"] == "success":
             continue  # hindsight is for attempts that missed their own goal
+        if instance["kind"] != "state":
+            # Only where "act, then finish" is the shape of the real task. On an
+            # answer task the finish has to read something, and pairs teaching
+            # 'Click "Search". -> act -> "Done."' taught exactly that: the next
+            # model clicked Search on delayed-search and finished with "Done.",
+            # 5 of 5, before any result could load.
+            continue
         for k, (name, record, images, prompt) in enumerate(steps):
             step = record.get("step")
             if not step or step["tool"] == "done":

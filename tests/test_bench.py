@@ -727,3 +727,30 @@ def test_selection_keeps_the_best_adapter_not_the_last(tmp_path):
         (tmp_path / f"round-{r:02d}" / "eval.json").write_text(json.dumps({"fitness": fitness}))
         _consider(config, r, Path(adapter))
     assert _best(config) == (0.32, Path("b"))
+
+
+def test_no_hindsight_on_answer_tasks(tmp_path):
+    """'Click "Search". -> act -> "Done."' taught a model to click Search on
+    delayed-search and finish with "Done." before any result loaded, 5 of 5."""
+    from anybrowser_bench.dataset import privileged_pairs
+
+    click = _engine_step("click", x=5, y=6)
+    _labelled(
+        tmp_path,
+        "delayed-search",
+        "false_claim",
+        [
+            (
+                _act(x=5, y=6),
+                {
+                    "goal_reached": False,
+                    "target": {"tag": "button", "text": "Search", "canvas": False},
+                },
+                click,
+            ),
+            (_act("wait"), {"goal_reached": None}, _engine_step("wait", changed=False)),
+        ],
+    )
+    assert not [
+        r for r, _ in privileged_pairs([tmp_path]) if r["meta"]["why"].startswith("hindsight")
+    ]
