@@ -385,6 +385,26 @@ async def run(config: LoopConfig) -> None:
     _write(config.out / "progress.json", _progress(config))
 
 
+def _stay_awake() -> None:
+    """Keep a Mac from idle-sleeping for as long as this process lives.
+
+    A run is hours long and unattended, and a Mac set to sleep after a minute
+    of idleness suspends the GPU, the model server and Chrome along with it.
+    The first overnight run looked like a training stall -- 2% CPU, no step in
+    1h45m -- until the power log showed "Wake from Deep Idle". ``caffeinate -w``
+    ties the assertion to this pid, so it ends when the run does, however it
+    ends. Elsewhere, a no-op.
+    """
+    if sys.platform != "darwin":
+        return
+    with contextlib.suppress(OSError):
+        subprocess.Popen(
+            ["caffeinate", "-i", "-w", str(os.getpid())],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m anybrowser_bench.improve")
     parser.add_argument("--out", type=Path, required=True)
@@ -413,6 +433,7 @@ def main(argv: list[str] | None = None) -> int:
         tasks=tuple(args.task),
     )
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    _stay_awake()
     asyncio.run(run(config))
     for entry in _progress(config):
         ev = entry.get("eval", {})

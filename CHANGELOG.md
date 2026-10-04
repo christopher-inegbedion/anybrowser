@@ -90,6 +90,11 @@ and a `BREAKING:` entry here.
 
 ### Fixed (bench)
 
+- An overnight self-improvement run stopped for about two hours at a training
+  step, at 2% CPU. The power log showed "Wake from Deep Idle": the Mac had gone
+  to sleep, and the GPU, the model server and Chrome went with it.
+  `anybrowser_bench.improve` now holds a `caffeinate -i -w <its pid>` assertion
+  on macOS for as long as it runs.
 - Sampling was not sampling. mlx-vlm's server derives its sampling keys from a
   fixed default seed, so at temperature 0.7 repeats of one state came back
   byte-identical, and the first self-improvement run's collection was in fact
