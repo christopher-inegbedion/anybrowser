@@ -133,8 +133,16 @@ _ids = itertools.count()
 
 def write_attempt(root: Path, attempt: Any, exchanges: Sequence[Exchange]) -> Path:
     """Write one attempt's exchanges and outcome. Returns its directory."""
-    where = root / f"{attempt.task_id}-s{attempt.seed}-{next(_ids):04d}"
-    where.mkdir(parents=True, exist_ok=False)
+    # The counter restarts with the process, so a resumed collection would
+    # collide with the directories its interrupted run left behind. Take the
+    # next free name; never overwrite.
+    while True:
+        where = root / f"{attempt.task_id}-s{attempt.seed}-{next(_ids):04d}"
+        try:
+            where.mkdir(parents=True, exist_ok=False)
+            break
+        except FileExistsError:
+            continue
     summary = asdict(attempt)
     (where / "attempt.json").write_text(json.dumps(summary, indent=2))
     for index, exchange in enumerate(exchanges):

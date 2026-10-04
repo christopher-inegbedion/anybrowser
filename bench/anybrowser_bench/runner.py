@@ -23,7 +23,7 @@ from anybrowser.models.provider import ModelProvider
 
 from .record import Exchange, RecordedRun, RecordingProvider, SeedingProvider, write_attempt
 from .server import BenchServer
-from .task import Outcome, Task, judge
+from .task import Instance, Outcome, Task, judge
 from .tasks import ALL_TASKS
 
 __all__ = ["Agent", "Attempt", "Report", "llm_agent", "run_suite"]
@@ -174,7 +174,19 @@ async def _attempt(
     instance = task.build(seed)
     root = server.mount(instance)
     started = time.monotonic()
-    await engine.navigate(root + instance.start)
+    try:
+        await engine.navigate(root + instance.start)
+    except Exception as exc:
+        # The browser, not the agent: a dropped DevTools connection once
+        # crashed a whole unattended run here, four hours in. As an error it
+        # is unscored, and three in a row stop the suite cleanly.
+        result = RunResult(
+            goal=instance.goal,
+            stop_reason=StopReason.ERROR,
+            error=f"could not open the task page: {exc!r}",
+            error_type=type(exc).__name__,
+        )
+        return _attempt_record(task, seed, started, result, None, server, root), []
     try:
         result = await agent(engine, instance.goal)
     except Exception as exc:
@@ -182,9 +194,23 @@ async def _attempt(
         # fault, and scored as a failure -- unlike StopReason.ERROR below, which
         # the loop reports when the model or the engine broke underneath it.
         result = RunResult(goal=instance.goal, stop_reason="agent_raised", error=repr(exc))
+    attempt = _attempt_record(task, seed, started, result, instance, server, root)
+    return attempt, list(getattr(result, "exchanges", ()))
+
+
+def _attempt_record(
+    task: Task,
+    seed: int,
+    started: float,
+    result: RunResult,
+    instance: Instance | None,
+    server: BenchServer,
+    root: str,
+) -> Attempt:
     if result.stop_reason == StopReason.ERROR and result.error_type not in _AGENT_ERRORS:
         outcome, score, reason = Outcome.ERROR.value, 0.0, f"infrastructure: {result.error}"
     else:
+        assert instance is not None, "only a page that opened can be judged"
         verdict = judge(
             instance,
             finished=result.stop_reason == StopReason.DONE,
@@ -193,7 +219,7 @@ async def _attempt(
         )
         outcome, score = verdict.outcome.value, verdict.score
         reason = verdict.reason if not result.error else f"{verdict.reason} ({result.error})"
-    attempt = Attempt(
+    return Attempt(
         task_id=task.id,
         seed=seed,
         kind=task.kind.value,
@@ -217,7 +243,6 @@ async def _attempt(
             for s in result.steps
         ),
     )
-    return attempt, list(getattr(result, "exchanges", ()))
 
 
 def llm_agent(

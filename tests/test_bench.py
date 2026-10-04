@@ -521,3 +521,29 @@ def test_preferences_keep_the_chosen_side_from_saying_keep_going_by_default(tmp_
     acting = len(rows) - chosen_done
     assert acting <= 2 * max(chosen_done, 0)
     assert stats.pairs == len(rows)
+
+
+async def test_a_browser_that_cannot_open_the_page_is_an_error_not_a_crash():
+    """A dropped DevTools connection crashed a four-hour run at navigate()."""
+    from anybrowser_bench import run_suite
+
+    class _Dead:
+        async def navigate(self, url, **_):
+            raise ConnectionError("no close frame received or sent")
+
+    async def never(engine, goal):
+        raise AssertionError("the agent must not run without a page")
+
+    report = await run_suite(never, _Dead(), seeds=(0, 1))
+    assert [a.outcome for a in report.attempts] == ["error"] * 3
+    assert "could not open the task page" in report.attempts[0].reason
+    assert report.aborted and not report.trustworthy
+
+
+def test_a_resumed_recording_never_overwrites_an_earlier_one(tmp_path):
+    import anybrowser_bench.record as record
+
+    first = _recorded(tmp_path, "success", [_step("done")])
+    record._ids = __import__("itertools").count()  # a new process: counter from 0
+    second = _recorded(tmp_path, "success", [_step("done")])
+    assert first != second and first.exists() and second.exists()

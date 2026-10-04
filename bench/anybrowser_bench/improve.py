@@ -308,6 +308,11 @@ async def run_round(config: LoopConfig, r: int, adapter: Path | None) -> Path:
                     log=log,
                     repeats=config.repeats,
                 )
+                if report.aborted:
+                    # A browser or server that died mid-collection: stop here,
+                    # so a rerun collects again rather than training on a
+                    # fraction of the round. What was recorded is kept.
+                    raise RuntimeError(f"collection stopped: {report.aborted}")
                 _write(collected, _summary(report))
 
     trained = here / "adapter"
