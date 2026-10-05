@@ -808,7 +808,7 @@ def test_rl_advantages_are_centred_per_task(tmp_path):
     _scored_labelled(
         tmp_path, "canvas-read", "failed", 0.0, [(_act("wait"), {"goal_reached": True}, wait)]
     )
-    samples = build_samples([tmp_path], min_advantage=0.0)
+    samples = build_samples([tmp_path], min_advantage=0.0, negative_scale=1.0, anchor_fraction=0.0)
     by_reply = {s.reply: s.advantage for s in samples}
     assert len(samples) == 2
     assert sum(by_reply.values()) == pytest.approx(0.0)
@@ -858,3 +858,38 @@ def test_screening_compares_on_the_same_seeds(tmp_path):
     (tmp_path / "best.json").write_text(json.dumps({"fitness": 0.2, "adapter": "x", "round": 0}))
     # first two seeds only: success, success, failed, false_claim -> (1+1+0-1)/4
     assert _best_screen(config) == pytest.approx(0.25)
+
+
+def test_rl_negatives_are_damped_and_successes_anchored(tmp_path):
+    """The first RL round pushed "done" down everywhere and lost missing-item,
+    a task it had solved, because nothing defended working behaviour."""
+    from anybrowser_bench.rl_train import build_samples
+
+    wait = _engine_step("wait", changed=False)
+    for seed_reply in ("a", "b", "c"):
+        _scored_labelled(
+            tmp_path,
+            "canvas-menu",
+            "success",
+            1.0,
+            [
+                (
+                    _act(x=1, y=2, n=seed_reply),
+                    {"goal_reached": False},
+                    _engine_step("click", x=1, y=2),
+                )
+            ],
+        )
+    _scored_labelled(
+        tmp_path, "canvas-menu", "false_claim", -1.0, [(_done("x"), {"goal_reached": False}, None)]
+    )
+    _scored_labelled(
+        tmp_path, "canvas-menu", "failed", 0.0, [(_act("wait"), {"goal_reached": False}, wait)]
+    )
+    plain = build_samples(
+        [tmp_path], min_advantage=0.0, negative_scale=1.0, anchor_fraction=0.0, max_samples=10
+    )
+    guarded = build_samples([tmp_path], min_advantage=0.0, max_samples=4)
+    worst = min(s.advantage for s in plain)
+    assert min(s.advantage for s in guarded) == pytest.approx(worst * 0.5)
+    assert any(s.anchor and s.advantage > 0 for s in guarded)

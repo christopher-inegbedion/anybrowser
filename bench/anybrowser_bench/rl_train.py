@@ -58,6 +58,10 @@ class Sample:
     advantage: float
     task: str
     reward: float
+    outcome: str = ""
+    #: An anchor: a step from a successful attempt, replayed with a small fixed
+    #: positive advantage so behaviour that already works is not eroded.
+    anchor: bool = False
 
 
 def _label_term(record: dict[str, Any], instance: dict[str, Any]) -> float:
@@ -78,8 +82,24 @@ def build_samples(
     label_weight: float = 0.5,
     max_samples: int = 150,
     min_advantage: float = 0.05,
+    negative_scale: float = 0.5,
+    anchor_fraction: float = 0.25,
+    anchor_advantage: float = 0.5,
 ) -> list[Sample]:
-    """Every recorded step with an image, scored and centred per task."""
+    """Every recorded step with an image, scored and centred per task.
+
+    Two guards against what the first RL round did. Collection was mostly
+    false claims, so most negative-advantage steps were "done" replies, and
+    the update pushed finishing down everywhere, including on missing-item,
+    which it had solved 5/5 and where finishing at once is right. That task's
+    advantages were near zero after centring, so nothing defended it.
+
+    - ``negative_scale`` damps negative advantages. In the direction check,
+      negatives moved further than positives for the same magnitude.
+    - ``anchor_fraction`` of the batch replays steps from successful attempts
+      at ``anchor_advantage``, a replay anchor, so working behaviour, finishing
+      included, keeps being reinforced while the rest changes.
+    """
     raw: list[tuple[dict[str, Any], dict[str, Any], Path, float]] = []
     for attempt_dir in _attempt_dirs(roots):
         attempt = json.loads((attempt_dir / "attempt.json").read_text())
@@ -107,15 +127,48 @@ def build_samples(
             advantage=reward - baseline[attempt["task_id"]],
             task=attempt["task_id"],
             reward=reward,
+            outcome=attempt["outcome"],
         )
         for attempt, record, image, reward in raw
     ]
-    samples = [s for s in samples if abs(s.advantage) >= min_advantage]
-    positive = sorted((s for s in samples if s.advantage > 0), key=lambda s: -s.advantage)
-    negative = sorted((s for s in samples if s.advantage < 0), key=lambda s: s.advantage)
-    half = max_samples // 2
-    chosen = positive[:half] + negative[:half]
-    Random(0).shuffle(chosen)
+    rng = Random(0)
+    successes = [s for s in samples if s.outcome == "success"]
+    informative = [s for s in samples if abs(s.advantage) >= min_advantage]
+    positive = sorted((s for s in informative if s.advantage > 0), key=lambda s: -s.advantage)
+    negative = sorted((s for s in informative if s.advantage < 0), key=lambda s: s.advantage)
+    anchors_wanted = int(max_samples * anchor_fraction) if successes else 0
+    half = (max_samples - anchors_wanted) // 2
+    chosen = positive[:half] + [
+        Sample(
+            s.messages, s.image, s.reply, s.advantage * negative_scale, s.task, s.reward, s.outcome
+        )
+        for s in negative[:half]
+    ]
+    taken = {(s.reply, str(s.image)) for s in chosen}
+    anchor_pool: dict[str, list[Sample]] = {}
+    for s in successes:
+        if (s.reply, str(s.image)) not in taken:
+            anchor_pool.setdefault(s.task, []).append(s)
+    queues = [rng.sample(q, len(q)) for q in anchor_pool.values()]
+    anchors: list[Sample] = []
+    while len(anchors) < anchors_wanted and any(queues):
+        for q in queues:
+            if q and len(anchors) < anchors_wanted:
+                s = q.pop()
+                anchors.append(
+                    Sample(
+                        s.messages,
+                        s.image,
+                        s.reply,
+                        anchor_advantage,
+                        s.task,
+                        s.reward,
+                        s.outcome,
+                        anchor=True,
+                    )
+                )
+    chosen += anchors
+    rng.shuffle(chosen)
     return chosen
 
 
