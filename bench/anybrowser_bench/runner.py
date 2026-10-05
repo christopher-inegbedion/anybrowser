@@ -312,6 +312,7 @@ def llm_agent(
     record: bool = False,
     temperature: float = 0.0,
     seed: int = 0,
+    compact: bool = False,
 ) -> Agent:
     """The reference agent: :class:`AgentRunner` with an :class:`LLMPlanner`.
 
@@ -343,6 +344,7 @@ def llm_agent(
                 max_tokens=max_tokens,
                 constrained=constrained,
                 temperature=temperature,
+                compact=compact,
             )
             config = RunConfig(max_steps=max_steps, include_screenshot=True)
             runner_cls = _PrivilegedRunner if record else AgentRunner

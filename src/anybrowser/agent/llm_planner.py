@@ -88,6 +88,13 @@ class LLMPlanner(Planner):
     """Ask a model for the next action."""
 
     name = "llm"
+    #: Appended to the request when the provider enforces the schema. A planner
+    #: whose system prompt already describes the reply sets it to "".
+    constrained_note: str = _CONSTRAINED_REPLY
+    #: Length caps on the free-text fields of a constrained reply. Every token
+    #: of narrative is decode time on every step.
+    narrative_max: int = 300
+    answer_max: int = 500
 
     def __init__(
         self,
@@ -218,10 +225,10 @@ class LLMPlanner(Planner):
             options = (
                 self._provider.structured_output(self.decision_schema(observation, tools)) or {}
             )
-            if options:
+            if options and self.constrained_note:
                 messages[-1] = Message(
                     role=messages[-1].role,
-                    text=messages[-1].text + "\n\n" + _CONSTRAINED_REPLY,
+                    text=messages[-1].text + "\n\n" + self.constrained_note,
                     images=messages[-1].images,
                 )
         completion = await self._provider.complete(
@@ -279,9 +286,9 @@ class LLMPlanner(Planner):
         return {
             "type": "object",
             "properties": {
-                "narrative": {"type": "string", "maxLength": 300},
+                "narrative": {"type": "string", "maxLength": self.narrative_max},
                 "done": {"type": "boolean"},
-                "answer": {"type": "string", "maxLength": 500},
+                "answer": {"type": "string", "maxLength": self.answer_max},
                 "tool": {"type": "string", "enum": names},
                 "arguments": {
                     "type": "object",

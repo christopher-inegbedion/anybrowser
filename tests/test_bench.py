@@ -778,3 +778,83 @@ def test_hindsight_is_off_unless_asked(tmp_path):
     assert not [
         r for r, _ in privileged_pairs([tmp_path]) if r["meta"]["why"].startswith("hindsight")
     ]
+
+
+# -- reinforcement learning samples, evaluation screening -------------------- #
+
+
+def _scored_labelled(tmp_path, task_id, outcome, score, steps):
+    import json
+
+    where = _labelled(tmp_path, task_id, outcome, steps)
+    data = json.loads((where / "attempt.json").read_text())
+    data["score"] = score
+    (where / "attempt.json").write_text(json.dumps(data))
+
+
+def test_rl_advantages_are_centred_per_task(tmp_path):
+    """No hand-set proportion: within a task, better-than-average steps are
+    positive and worse are negative, whatever the mix of outcomes."""
+    from anybrowser_bench.rl_train import build_samples
+
+    wait = _engine_step("wait", changed=False)
+    _scored_labelled(
+        tmp_path,
+        "canvas-read",
+        "success",
+        1.0,
+        [(_done(task("canvas-read").build(0).expected), {"goal_reached": True}, None)],
+    )
+    _scored_labelled(
+        tmp_path, "canvas-read", "failed", 0.0, [(_act("wait"), {"goal_reached": True}, wait)]
+    )
+    samples = build_samples([tmp_path], min_advantage=0.0)
+    by_reply = {s.reply: s.advantage for s in samples}
+    assert len(samples) == 2
+    assert sum(by_reply.values()) == pytest.approx(0.0)
+    finishing = next(a for r, a in by_reply.items() if '"done": true' in r)
+    assert finishing > 0, "finishing correctly on a screen showing the answer must be preferred"
+
+
+def test_rl_label_term_punishes_finishing_before_the_goal(tmp_path):
+    from anybrowser_bench.rl_train import build_samples
+
+    _scored_labelled(
+        tmp_path,
+        "form-fill",
+        "false_claim",
+        -1.0,
+        [(_done("x", "click", x=1, y=2), {"goal_reached": False}, None)],
+    )
+    _scored_labelled(
+        tmp_path,
+        "form-fill",
+        "failed",
+        0.0,
+        [(_act(x=1, y=2), {"goal_reached": False}, _engine_step("click", x=1, y=2))],
+    )
+    (worst,) = [s for s in build_samples([tmp_path], min_advantage=0.0) if s.advantage < 0]
+    assert '"done": true' in worst.reply
+
+
+def test_screening_compares_on_the_same_seeds(tmp_path):
+    import json
+
+    from anybrowser_bench.improve import LoopConfig, _best_screen
+
+    config = LoopConfig(out=tmp_path, screen_seeds=2)
+    (tmp_path / "round-00").mkdir()
+    (tmp_path / "round-00" / "eval.json").write_text(
+        json.dumps(
+            {
+                "fitness": 0.2,
+                "by_task": {
+                    "a": ["success", "success", "false_claim"],
+                    "b": ["failed", "false_claim", "success"],
+                },
+            }
+        )
+    )
+    (tmp_path / "best.json").write_text(json.dumps({"fitness": 0.2, "adapter": "x", "round": 0}))
+    # first two seeds only: success, success, failed, false_claim -> (1+1+0-1)/4
+    assert _best_screen(config) == pytest.approx(0.25)

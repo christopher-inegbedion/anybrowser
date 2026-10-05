@@ -76,6 +76,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Image-only agent: decides from the screenshot, clicks by coordinates.",
     )
     parser.add_argument(
+        "--compact",
+        action="store_true",
+        help="Vision agent: short fixed system prompt, one-line history, capped replies.",
+    )
+    parser.add_argument(
         "--constrained",
         action="store_true",
         help="Have the provider enforce the reply's JSON shape while decoding.",
@@ -109,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
         max_tokens=args.max_tokens,
         vision=args.vision,
         constrained=args.constrained,
+        compact=args.compact,
         record=args.record is not None,
         temperature=args.temperature,
     )

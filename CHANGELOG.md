@@ -82,6 +82,36 @@ and a `BREAKING:` entry here.
   `improve` now trains with ORPO by default and falls back to rebalanced SFT
   (`max_per_task`, `max_done_share`) when there are no pairs. It also evaluates
   on 5 held-out seeds and records evaluations without training on them.
+- Reinforcement learning, made cheap (`anybrowser_bench.rl_train`,
+  `improve --train-mode rl`). This is a policy gradient over every recorded
+  step. A step's reward is its attempt's judge score plus 0.5 x (+1/-1) for
+  whether its finish decision matched what the bench knew. The advantage is
+  that reward minus its task's mean, so each task's advantages sum to zero and
+  no hand-set proportion decides how often the model hears "finish". Half the
+  trained steps are the most positive and half the most negative.
+
+  The screenshot is encoded once, and the prompt runs forward once with no
+  gradient into a KV cache. Only the reply is differentiated against that
+  cache: 5.5s and 4.6 GB per step on an M4, against 92-126s and 26.6 GB for a
+  naive pass (24s with gradient checkpointing, as ORPO ran). Reply
+  log-probabilities match the full pass to within 0.005 per token.
+
+  Checked: at the intended learning rate (1e-5) one update made all 4
+  positive-advantage replies likelier and all 4 negative ones less likely,
+  measured by an independent full forward pass. At 1e-4 every reply got less
+  likely, positives included.
+- `VisionPlanner(compact=True)`, `--compact`. The fixed instructions live in a
+  short system prompt, history is one line per step, and the reply's free text
+  is capped. Measured on four held-out tasks: 2,356 -> 1,609 prompt tokens
+  (-32%) and 9.6 -> 8.0s of model time per step. About 2.6s of every step is
+  the vision encoder at full resolution, which no prompt change touches.
+- Evaluation screening (`improve --screen-seeds 3`): a candidate plays 3
+  held-out seeds first and stops if it is already behind the best on those same
+  seeds. A screened-out evaluation is recorded but never selected.
+- The model server's prefix cache is off by default (`prefix_cache`). In
+  mlx-vlm 0.7.4 its self-check fails for Qwen2.5-VL ("model has no
+  make_cache"), so it saved nothing, while opening a disk tier allowed to grow
+  to 20 GB.
 - Training from what the bench knows at each step
   (`anybrowser_bench.privileged`). While collecting training data, never while
   evaluating, each step records two facts:

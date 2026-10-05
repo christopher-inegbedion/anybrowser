@@ -93,6 +93,21 @@ class LoopConfig:
     #: so pairs already learnt are not re-learnt into the ground every round.
     data_window: int = 2
     continue_learning_rate: float = 5e-5
+    #: "rl": policy gradient on every recorded step (anybrowser_bench.rl_train),
+    #: advantages centred per task. Needs a start adapter.
+    rl_max_samples: int = 150
+    rl_learning_rate: float = 1e-5
+    label_weight: float = 0.5
+    #: Evaluate a candidate on this many held-out seeds first, and stop there if
+    #: it is already behind the best on those same seeds. 0 disables.
+    screen_seeds: int = 3
+    #: The vision agent's compact prompt (VisionPlanner(compact=True)).
+    compact: bool = False
+    #: mlx-vlm's automatic prefix cache. Off: in 0.7.4 its self-check fails for
+    #: Qwen2.5-VL ("model has no make_cache"), so it saved nothing, measured
+    #: 8.2s/step against 8.0s without it -- while still opening a disk tier
+    #: allowed to grow to 20 GB under ~/.cache/mlx-vlm/apc.
+    prefix_cache: bool = False
     beta: float = 0.1
     max_pairs_per_task: int = 10
     #: An ORPO step on this machine is ~48s (two sequences, uncompiled); this
@@ -125,8 +140,9 @@ def serving(config: LoopConfig, adapter: Path | None, log: Path) -> Iterator[str
     ]
     if adapter is not None:
         command += ["--adapter-path", str(adapter)]
+    env = {**os.environ, "APC_ENABLED": "1" if config.prefix_cache else "0"}
     with log.open("a") as sink:
-        process = subprocess.Popen(command, stdout=sink, stderr=subprocess.STDOUT)
+        process = subprocess.Popen(command, stdout=sink, stderr=subprocess.STDOUT, env=env)
     url = f"http://127.0.0.1:{config.port}"
     try:
         deadline = time.monotonic() + 300
@@ -194,6 +210,7 @@ async def _bench(
         constrained=True,
         record=record_to is not None,
         temperature=temperature,
+        compact=config.compact,
         # Distinct per round, so a resumed or later round never replays the
         # same sampling sequence.
         seed=int(time.time()),
@@ -300,6 +317,33 @@ def _summary(report: Any) -> dict[str, Any]:
     }
 
 
+def _train_rl(
+    config: LoopConfig, recordings: list[Path], out: Path, init: Path, log: Path
+) -> dict[str, Any]:
+    _unload_ollama()
+    command = [
+        sys.executable,
+        "-m",
+        "anybrowser_bench.rl_train",
+        *[str(r) for r in recordings],
+        "--init",
+        str(init),
+        "--out",
+        str(out),
+        "--model",
+        config.model,
+        "--max-samples",
+        str(config.rl_max_samples),
+        "--learning-rate",
+        str(config.rl_learning_rate),
+        "--label-weight",
+        str(config.label_weight),
+    ]
+    with log.open("a") as sink:
+        subprocess.run(command, stdout=sink, stderr=subprocess.STDOUT, check=True)
+    return dict(json.loads((out / "rl_train.json").read_text()))
+
+
 def _best(config: LoopConfig) -> tuple[float, Path | None]:
     path = config.out / "best.json"
     if not path.exists():
@@ -313,7 +357,10 @@ def _consider(config: LoopConfig, r: int, adapter: Path | None) -> None:
     evaluation = config.out / f"round-{r:02d}" / "eval.json"
     if not evaluation.exists():
         return
-    fitness = float(json.loads(evaluation.read_text())["fitness"])
+    data = json.loads(evaluation.read_text())
+    if data.get("screened_out"):
+        return  # scored on fewer seeds; not comparable, and behind anyway
+    fitness = float(data["fitness"])
     if fitness > _best(config)[0]:
         _write(
             config.out / "best.json",
@@ -321,24 +368,72 @@ def _consider(config: LoopConfig, r: int, adapter: Path | None) -> None:
         )
 
 
+def _best_screen(config: LoopConfig) -> float | None:
+    """The best adapter's mean score on the screening seeds, from its own eval."""
+    path = config.out / "best.json"
+    if not config.screen_seeds or not path.exists():
+        return None
+    best_round = json.loads(path.read_text())["round"]
+    evaluation = config.out / f"round-{best_round:02d}" / "eval.json"
+    if not evaluation.exists():
+        return None
+    by_task = json.loads(evaluation.read_text())["by_task"]
+    from .task import SCORES, Outcome
+
+    scores = [
+        SCORES[Outcome(o)]
+        for outcomes in by_task.values()
+        for o in outcomes[: config.screen_seeds]
+        if o != Outcome.ERROR.value
+    ]
+    return sum(scores) / len(scores) if scores else None
+
+
 async def _evaluate(config: LoopConfig, here: Path, adapter: Path | None) -> None:
+    from .runner import Report
+
     evaluation = here / "eval.json"
     if evaluation.exists():
         return
+    seeds = list(config.eval_seeds)
+    bar = _best_screen(config)
+    first = seeds[: config.screen_seeds] if bar is not None else seeds
     with serving(config, adapter, here / "server.log") as url:
         # Recorded so a regression can be read rather than guessed at. Never
         # trained on: datasets read round-*/recordings only.
-        report = await _bench(
-            config,
-            url,
-            config.eval_seeds,
-            temperature=0.0,
-            record_to=here / "eval-recordings",
-            log=here / "log.txt",
-        )
-    if not report.trustworthy:
-        raise RuntimeError(f"evaluation untrustworthy: {report.aborted or 'errors'}")
+        async def play(chunk: list[int]) -> Any:
+            report = await _bench(
+                config,
+                url,
+                chunk,
+                temperature=0.0,
+                record_to=here / "eval-recordings",
+                log=here / "log.txt",
+            )
+            if not report.trustworthy:
+                raise RuntimeError(f"evaluation untrustworthy: {report.aborted or 'errors'}")
+            return report
+
+        report = await play(first)
+        if bar is not None and report.fitness < bar:
+            # Behind the best on the same seeds already: the remaining seeds
+            # could only confirm a rejection. Recorded, never selected.
+            _write(evaluation, {**_summary(report), "screened_out": True, "bar": bar})
+            return
+        if len(first) < len(seeds):
+            rest = await play(seeds[len(first) :])
+            # Seed order within each task must match a full run's, so the
+            # screening bar keeps reading the same seeds.
+            merged = Report(attempts=report.attempts + rest.attempts)
+            merged.attempts.sort(key=lambda a: (list(_task_ids(config)).index(a.task_id), a.seed))
+            report = merged
     _write(evaluation, _summary(report))
+
+
+def _task_ids(config: LoopConfig) -> list[str]:
+    from .tasks import ALL_TASKS
+
+    return list(config.tasks) or [t.id for t in ALL_TASKS]
 
 
 async def run_round(config: LoopConfig, r: int, adapter: Path | None) -> Path:
@@ -387,6 +482,23 @@ async def run_round(config: LoopConfig, r: int, adapter: Path | None) -> Path:
         if config.continue_from_best and config.data_window > 0:
             recordings = recordings[-config.data_window :]
         mode, rows = config.train_mode, 0
+        if mode == "rl":
+            if best is None:
+                raise RuntimeError("rl mode continues from an adapter: pass --start-adapter")
+            started = time.monotonic()
+            rl_stats = _train_rl(config, recordings, trained, best, log)
+            _write(here / "dataset.json", {"mode": mode, "samples": rl_stats["samples"]})
+            _write(
+                here / "train.json",
+                {
+                    "mode": mode,
+                    "rows": rl_stats["samples"],
+                    "init": str(best),
+                    "seconds": time.monotonic() - started,
+                    **rl_stats,
+                },
+            )
+            return trained
         if mode == "privileged":
             vstats = build_privileged(recordings, dataset, max_pairs=config.max_pairs)
             _write(here / "dataset.json", {"mode": mode, **asdict(vstats)})
@@ -483,7 +595,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--collect-seeds", type=int, default=3)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--eval-seeds", type=int, nargs="+", default=[1000, 1001, 1002, 1003, 1004])
-    parser.add_argument("--train-mode", choices=["privileged", "orpo", "sft"], default="privileged")
+    parser.add_argument(
+        "--train-mode", choices=["rl", "privileged", "orpo", "sft"], default="privileged"
+    )
+    parser.add_argument("--compact", action="store_true", help="Compact vision prompt.")
+    parser.add_argument("--rl-samples", type=int, default=150)
+    parser.add_argument("--screen-seeds", type=int, default=3)
     parser.add_argument("--start-adapter", type=Path, default=None)
     parser.add_argument(
         "--from-base",
@@ -506,6 +623,9 @@ def main(argv: list[str] | None = None) -> int:
         start_adapter=args.start_adapter,
         continue_from_best=not args.from_base,
         max_pairs=args.max_pairs,
+        compact=args.compact,
+        rl_max_samples=args.rl_samples,
+        screen_seeds=args.screen_seeds,
         eval_seeds=tuple(args.eval_seeds),
         temperature=args.temperature,
         epochs=args.epochs,

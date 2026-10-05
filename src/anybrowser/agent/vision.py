@@ -64,6 +64,25 @@ acting once you can see the answer.
 """
 
 
+#: The compact format: everything that does not change between steps lives in
+#: the system message, so a server with prefix caching reads it once, and the
+#: per-step message carries only the goal, a one-line-per-step history and the
+#: screenshot. Measured on the verbose format: 2,289 prompt tokens a step, of
+#: which ~950 were text -- 378 system, ~400 tool descriptions repeated every
+#: step, the rest history and a format note.
+VISION_COMPACT_PROMPT = """\
+You operate a web browser from screenshots to achieve a goal. Each turn, choose ONE action.
+Coordinates are pixels in the screenshot from its top-left; aim for the middle of the target.
+To fill a field, use type_text with the field's x and y.
+If an action had [no effect], do something different. If the page is still loading, wait.
+Finish only when the screenshot shows the goal achieved, with what you found in answer.
+Tools: click(x,y) | type_text(text,x,y,clear_first) | press_key(key) | \
+scroll(delta_y,x,y) | wait(seconds<=15) | navigate(url)
+Reply as JSON: {"narrative": short reason, "done": true|false, \
+"answer": the result when done else "", "tool": name, "arguments": {...}}\
+"""
+
+
 class VisionPlanner(LLMPlanner):
     """:class:`LLMPlanner` with the page shown only as an image.
 
@@ -82,17 +101,27 @@ class VisionPlanner(LLMPlanner):
         model: str,
         temperature: float = 0.0,
         max_tokens: int = 2048,
-        system_prompt: str = VISION_SYSTEM_PROMPT,
+        system_prompt: str | None = None,
         constrained: bool = False,
+        compact: bool = False,
     ) -> None:
+        """``compact`` uses :data:`VISION_COMPACT_PROMPT` and a one-line history,
+        and caps the reply's free text: fewer tokens to read and to write on
+        every step, and a fixed prefix a server can cache."""
         super().__init__(
             provider,
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
-            system_prompt=system_prompt,
+            system_prompt=system_prompt
+            or (VISION_COMPACT_PROMPT if compact else VISION_SYSTEM_PROMPT),
             constrained=constrained,
         )
+        self._compact = compact
+        if compact:
+            self.constrained_note = ""
+            self.narrative_max = 80
+            self.answer_max = 120
 
     def _constrain(
         self, name: str, spec: dict[str, Any], observation: Observation
@@ -117,6 +146,18 @@ class VisionPlanner(LLMPlanner):
             )
         view = observation.snapshot.viewport
         image = _at_css_size(observation.screenshot, view)
+        if self._compact:
+            lines = [f"GOAL: {observation.goal}", f"Screen {view.width}x{view.height}."]
+            if observation.history:
+                reads = {tool.name for tool in tools if not tool.mutating}
+                lines.append("Done so far:")
+                lines += [_compact_step(i, s, reads) for i, s in enumerate(observation.history, 1)]
+            lines += [f"- {n}" for n in observation.notes]
+            lines.append(f"Step {observation.step_index + 1}.")
+            return [
+                Message(role=Role.SYSTEM, text=self._system_prompt),
+                Message(role=Role.USER, text="\n".join(lines), images=[image]),
+            ]
         parts = [
             f"GOAL: {observation.goal}",
             "",
@@ -135,6 +176,18 @@ class VisionPlanner(LLMPlanner):
             Message(role=Role.SYSTEM, text=self._system_prompt),
             Message(role=Role.USER, text="\n".join(parts), images=[image]),
         ]
+
+
+def _compact_step(index: int, step: Any, reads: Any) -> str:
+    """One history line: what was done and what it did, without the narrative."""
+    decision, result = step.decision, step.result
+    arguments = ",".join(f"{k}={v!r}" for k, v in decision.arguments.items())
+    marker = ""
+    if not result.ok:
+        marker = " [failed]"
+    elif not result.changed and decision.tool not in reads:
+        marker = " [no effect]"
+    return f"{index}. {decision.tool}({arguments}) -> {result.summary}{marker}"
 
 
 def _at_css_size(shot: Screenshot, view: Viewport) -> ImagePart:
