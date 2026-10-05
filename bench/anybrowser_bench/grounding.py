@@ -187,19 +187,30 @@ def parse_point(text: str) -> tuple[float, float] | None:
 
 
 def llm_pointer(
-    provider: Any, model: str, *, normalized: bool = False, max_tokens: int = 2000
+    provider: Any,
+    model: str,
+    *,
+    normalized: bool = False,
+    max_tokens: int = 2000,
+    image_width: int | None = None,
+    prompt_tokens: list[int] | None = None,
 ) -> Pointer:
     """A Pointer backed by any anybrowser model provider.
 
     ``normalized`` asks for 0-1000 coordinates and scales them back; the default
     is pixels, which is what qwen2.5vl was trained on and the only form it got
-    right.
+    right. ``image_width`` shrinks the screenshot to that width before the
+    model sees it and scales its answer back up -- the measurement behind
+    choosing a cheaper image. ``prompt_tokens`` collects each call's input size.
     """
     from anybrowser.models.provider import ImagePart, Message, Role
 
     async def point(
         png: bytes, description: str, width: int, height: int
     ) -> tuple[float, float] | None:
+        scale = 1.0
+        if image_width and image_width < width:
+            png, width, height, scale = _shrink(png, width, height, image_width)
         if normalized:
             ask = (
                 f"Find {description} in this screenshot. Reply with only JSON "
@@ -217,12 +228,28 @@ def llm_pointer(
             temperature=0.0,
             max_tokens=max_tokens,
         )
+        if prompt_tokens is not None:
+            prompt_tokens.append(reply.usage.input_tokens)
         p = parse_point(reply.text)
         if p is not None and normalized:
             p = (p[0] / 1000 * width, p[1] / 1000 * height)
+        if p is not None:
+            p = (p[0] * scale, p[1] * scale)
         return p
 
     return point
+
+
+def _shrink(png: bytes, width: int, height: int, to_width: int) -> tuple[bytes, int, int, float]:
+    import io
+
+    from PIL import Image
+
+    to_height = round(height * to_width / width)
+    with Image.open(io.BytesIO(png)) as img:
+        out = io.BytesIO()
+        img.resize((to_width, to_height), Image.Resampling.LANCZOS).save(out, format="PNG")
+    return out.getvalue(), to_width, to_height, width / to_width
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -239,19 +266,36 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model-option", action="append", default=[], metavar="KEY=VALUE")
     parser.add_argument("--normalized", action="store_true", help="Ask for 0-1000, not pixels.")
     parser.add_argument("--seeds", type=int, default=2)
+    parser.add_argument(
+        "--image-width",
+        type=int,
+        nargs="+",
+        default=[0],
+        help="Shrink screenshots to these widths (0 = full size); one score each.",
+    )
     args = parser.parse_args(argv)
 
     provider = model_registry.get(args.model)(**_options(args.model_option))
-    pointer = llm_pointer(provider, args.model_name, normalized=args.normalized)
 
     async def go() -> int:
         options = {**_viewport_defaults(args.engine), **_options(args.option)}
         async with await open_engine(args.engine, **options) as engine:
             targets = await collect_targets(engine, seeds=range(args.seeds))
-        report = await score(pointer, targets)
-        print(f"{args.model_name}: {report.summary()}")
-        for miss in report.misses[:8]:
-            print("  miss:", miss)
+        for width in args.image_width:
+            tokens: list[int] = []
+            pointer = llm_pointer(
+                provider,
+                args.model_name,
+                normalized=args.normalized,
+                image_width=width or None,
+                prompt_tokens=tokens,
+            )
+            report = await score(pointer, targets)
+            size = f"{width}px" if width else "full"
+            mean = sum(tokens) / len(tokens) if tokens else 0
+            print(f"{args.model_name} @ {size}: {report.summary()}   {mean:.0f} prompt tokens")
+            for miss in report.misses[:4]:
+                print("  miss:", miss)
         return 0
 
     return asyncio.run(go())
