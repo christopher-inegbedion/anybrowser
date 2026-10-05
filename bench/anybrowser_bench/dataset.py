@@ -541,7 +541,7 @@ def _hindsight_goal(step: dict[str, Any], target: dict[str, Any] | None) -> str:
 
 
 def privileged_pairs(
-    roots: Iterable[Path], stats: PreferenceStats | None = None
+    roots: Iterable[Path], stats: PreferenceStats | None = None, *, hindsight: bool = False
 ) -> Iterator[tuple[dict[str, Any], list[Path]]]:
     """Label pairs and hindsight pairs from recordings that carry privileged
     facts. Recordings without them (older runs) contribute nothing here."""
@@ -637,7 +637,7 @@ def privileged_pairs(
                         },
                     )
 
-        if attempt["outcome"] == "success":
+        if not hindsight or attempt["outcome"] == "success":
             continue  # hindsight is for attempts that missed their own goal
         if instance["kind"] != "state":
             # Only where "act, then finish" is the shape of the real task. On an
@@ -704,6 +704,7 @@ def build_privileged(
     *,
     max_pairs: int = 60,
     max_acting_per_finishing: float | None = 2.0,
+    hindsight: bool = False,
 ) -> PreferenceStats:
     """Label, hindsight and outcome pairs together, balanced, at most
     ``max_pairs`` (an ORPO step is ~48s on the reference machine).
@@ -713,7 +714,13 @@ def build_privileged(
     """
     roots = list(roots)
     stats = PreferenceStats()
-    rows = list(privileged_pairs(roots, stats))
+    # Hindsight is off by default. With it, both rounds that used it put new
+    # false claims on exactly the tasks it covered: answer tasks in one round
+    # (delayed-search, async-status), state tasks in the next (form-fill,
+    # cookie-wall). 'Click "Full name". -> act -> finish' is made on a screen
+    # indistinguishable from the real form-fill task, and a 3B model does not
+    # condition on the goal text firmly enough to tell a sub-goal from the goal.
+    rows = list(privileged_pairs(roots, stats, hindsight=hindsight))
     outcome_stats = PreferenceStats()
     rows += list(preference_pairs(roots, outcome_stats))
     for reason, n in outcome_stats.by_reason.items():

@@ -95,8 +95,10 @@ and a `BREAKING:` entry here.
   guessing. `dataset.build_privileged` turns this into three kinds of pair:
   - label pairs: every wrong finish decision, both finishing too early and too
     late, plus wrong answers on a screen that showed the right one;
-  - hindsight pairs: a failed attempt's action that changed the page becomes a
-    solved goal such as `Click "Full name".`, act then finish;
+  - hindsight pairs (off by default since 040de89 and the next commit): a
+    failed attempt's action that changed the page becomes a solved goal such as
+    `Click "Full name".`, act then finish. In both rounds that used them,
+    new false claims appeared on exactly the tasks they covered;
   - the existing outcome pairs.
 
   All are balanced and capped at 60 per round.

@@ -685,7 +685,7 @@ def test_an_unlabelled_step_teaches_nothing(tmp_path):
     assert list(privileged_pairs([tmp_path])) == []
 
 
-def test_a_failed_attempt_still_teaches_what_it_achieved(tmp_path):
+def test_a_failed_attempt_still_teaches_what_it_achieved_when_asked(tmp_path):
     """Hindsight: the click landed on "Full name", so for the goal 'Click
     "Full name".' it was right -- and the next step should have finished."""
     import json
@@ -709,7 +709,7 @@ def test_a_failed_attempt_still_teaches_what_it_achieved(tmp_path):
             (_act("wait"), {"goal_reached": False}, _engine_step("wait", changed=False)),
         ],
     )
-    rows = {r["meta"]["why"]: r for r, _ in privileged_pairs([tmp_path])}
+    rows = {r["meta"]["why"]: r for r, _ in privileged_pairs([tmp_path], hindsight=True)}
     act, finish = rows["hindsight:act"], rows["hindsight:finish"]
     assert act["chosen"][1]["content"].startswith('GOAL: Click "Full name".')
     assert json.loads(act["chosen"][-1]["content"])["done"] is False
@@ -749,6 +749,30 @@ def test_no_hindsight_on_answer_tasks(tmp_path):
                 click,
             ),
             (_act("wait"), {"goal_reached": None}, _engine_step("wait", changed=False)),
+        ],
+    )
+    assert not [
+        r for r, _ in privileged_pairs([tmp_path]) if r["meta"]["why"].startswith("hindsight")
+    ]
+
+
+def test_hindsight_is_off_unless_asked(tmp_path):
+    from anybrowser_bench.dataset import privileged_pairs
+
+    click = _engine_step("click", x=5, y=6)
+    _labelled(
+        tmp_path,
+        "form-fill",
+        "failed",
+        [
+            (
+                _act(x=5, y=6),
+                {
+                    "goal_reached": False,
+                    "target": {"tag": "input", "text": "Full name", "canvas": False},
+                },
+                click,
+            ),
         ],
     )
     assert not [
