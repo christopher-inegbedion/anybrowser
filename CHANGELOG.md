@@ -12,6 +12,8 @@ and a `BREAKING:` entry here.
 
 ### Fixed
 
+- The custom-engine reference skeleton now prints usage instructions when run
+  directly instead of exiting silently.
 - Safari: the first run of a session failed tests that passed on every run
   after it. `start()` only needs the background page to answer `tabs`, so it
   returned while the content script in the target tab was still coming up, and

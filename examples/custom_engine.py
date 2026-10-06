@@ -1,12 +1,12 @@
 """The smallest possible engine, and how to test it.
 
-Not a real backend -- it drives nothing. It exists to show the shape, and to
-show that the conformance suite will refuse to be fooled by it:
+This is a reference skeleton, not a runnable browser demo. It drives nothing.
+Importing it registers the toy engine for the conformance suite:
 
     pytest --pyargs anybrowser_conformance --engine toy -p examples.custom_engine
 
-fails immediately, because a backend that returns changed=True unconditionally
-cannot pass the honesty tests. That is the point.
+The toy reports changed=False for actions it cannot perform. It is not a
+complete backend and is not expected to pass the full conformance suite.
 """
 
 from __future__ import annotations
@@ -81,3 +81,10 @@ class ToyEngine(BrowserEngine):
 # In your own package this is an entry point instead; registering in-process is
 # the shortcut for tests and examples.
 engines.register("toy", ToyEngine)
+
+
+if __name__ == "__main__":
+    print("This is a reference skeleton, not a browser demo.")
+    print("The toy engine reports changed=False for unsupported actions.")
+    print("To run its conformance checks (failures are expected):")
+    print("pytest --pyargs anybrowser_conformance --engine toy -p examples.custom_engine")
