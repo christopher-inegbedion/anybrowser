@@ -13,11 +13,14 @@ from .browser import (
     canonical_key,
     default_tools,
 )
+from .pointer import ITEM_PROMPT, ClickItemTool, TypeIntoItemTool, pointer_tools
 from .vision import VISION_TOOLS, PointClickTool, PointScrollTool, PointTypeTool, vision_tools
 
 __all__ = [
     "BROWSER_TOOLS",
+    "ITEM_PROMPT",
     "VISION_TOOLS",
+    "ClickItemTool",
     "ClickTool",
     "NavigateTool",
     "PointClickTool",
@@ -26,10 +29,12 @@ __all__ = [
     "PressKeyTool",
     "ScrollTool",
     "SelectOptionTool",
+    "TypeIntoItemTool",
     "TypeTool",
     "UploadTool",
     "WaitTool",
     "canonical_key",
     "default_tools",
+    "pointer_tools",
     "vision_tools",
 ]
