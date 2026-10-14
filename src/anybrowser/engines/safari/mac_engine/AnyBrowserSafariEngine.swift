@@ -5,7 +5,7 @@
 // window, which cannot adopt the user's tabs. What Safari *does* expose is the
 // accessibility tree of live web content, and that turns out to be enough for
 // the half of the job that JavaScript cannot do: producing input the page
-// treats as real. See docs/porting/safari.md for the measurements.
+// treats as real. See docs/guides/engine-notes-chrome-and-safari.md for the measurements.
 //
 // This helper owns the three things the extension cannot do from inside a page:
 //

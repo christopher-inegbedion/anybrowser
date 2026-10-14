@@ -112,6 +112,11 @@ the text landed; scrolling must compare positions; clicking needs some signal
 that the page moved. An engine that returns `changed=True` unconditionally passes
 almost every test in the suite and makes every agent on top of it loop forever.
 
+More hard-won details, from the Chrome and Safari engines, are in
+[Engine notes: Chrome and Safari](engine-notes-chrome-and-safari.md): out-of-process
+iframe sessions, tiled full-page capture, `AXValue` writes that are silently
+dropped, and the checks the suite cannot make.
+
 ## What "good" looks like beyond green
 
 The suite tests the contract, not the quality. Two engines can both pass and one

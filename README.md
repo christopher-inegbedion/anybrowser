@@ -227,6 +227,7 @@ docs/            architecture, guides, ADRs
 - [Capabilities](docs/architecture/capabilities.md) — why backends declare instead of raise
 - [Truthful outcomes](docs/architecture/truthful-outcomes.md) — why `changed` exists
 - [Writing an engine](docs/guides/writing-an-engine.md)
+- [Engine notes: Chrome and Safari](docs/guides/engine-notes-chrome-and-safari.md) — what the two reference engines learned
 - [Writing a transport](docs/guides/writing-a-transport.md)
 - [Writing a model provider](docs/guides/writing-a-model-provider.md)
 - [Driving your own Chrome](docs/guides/chrome-extension.md)

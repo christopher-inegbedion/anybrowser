@@ -7,7 +7,7 @@
 // What it deliberately does NOT do is click. A synthetic click carries no user
 // activation, so anything gated on it -- window.open, clipboard, media, file
 // pickers -- silently does nothing while reporting success. Those go through the
-// native helper's AXPress instead. See docs/porting/safari.md.
+// native helper's AXPress instead. See docs/guides/engine-notes-chrome-and-safari.md.
 
 (() => {
   // Safari injects content scripts more than once on some navigations; a second

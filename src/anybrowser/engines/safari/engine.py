@@ -29,7 +29,7 @@ implementations where the pixel-form does not.
 Status: both halves are implemented -- the native one (:mod:`.bridge`) for input
 and capture, and the Safari Web Extension for perception. Each needs a local
 build and a one-time Accessibility grant, so ``probe()`` refuses when the helper
-is unbuilt rather than half-working. See ``docs/porting/safari.md`` and
+is unbuilt rather than half-working. See ``docs/guides/engine-notes-chrome-and-safari.md`` and
 ``docs/guides/safari-extension.md``.
 """
 

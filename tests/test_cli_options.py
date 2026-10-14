@@ -12,7 +12,7 @@ import argparse
 
 import pytest
 
-from anybrowser.cli.main import _parse_options, build_parser, cmd_run
+from anybrowser.cli.app import _parse_options, build_parser, cmd_run
 
 
 def test_model_options_parse_into_constructor_kwargs():
@@ -74,17 +74,13 @@ async def test_the_options_reach_the_provider_constructor(monkeypatch):
             seen.update(kwargs)
             raise _Sentinel
 
-    # Swap the whole registry cmd_run looks up. Two wrinkles force this shape:
-    # `anybrowser.cli.main` as an attribute resolves to the exported *function*,
-    # not the module, so the module comes from sys.modules; and Registry is
-    # slotted, so its `get` cannot be patched in place.
-    import sys
-
+    # Swap the whole registry cmd_run looks up: Registry is slotted, so its
+    # `get` cannot be patched in place.
     class FakeRegistry:
         def get(self, name: str) -> type:
             return SpyProvider
 
-    monkeypatch.setattr(sys.modules["anybrowser.cli.main"], "model_registry", FakeRegistry())
+    monkeypatch.setattr("anybrowser.cli.app.model_registry", FakeRegistry())
     args = argparse.Namespace(
         engine="playwright",
         option=[],

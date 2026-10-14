@@ -67,7 +67,7 @@ jobs:
           # satisfiable, so a change that breaks it broke the contract.
           - { engine: playwright, os: ubuntu-latest, required: true }
           # Chrome runs its DevTools pipe here; the extension pipe cannot be
-          # exercised without a real browser profile. See docs/porting/chrome.md.
+          # exercised without a real browser profile. See docs/guides/engine-notes-chrome-and-safari.md.
           - { engine: chrome, os: ubuntu-latest, required: true }
           # Safari's perception half is unwritten, so probe() refuses and the
           # whole contract skips. Running it anyway is not theatre: it proves

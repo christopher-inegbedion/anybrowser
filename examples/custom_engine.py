@@ -1,7 +1,11 @@
 """The smallest possible engine, and how to test it.
 
-Not a real backend -- it drives nothing. It exists to show the shape, and to
-show that the conformance suite will refuse to be fooled by it:
+    uv run python examples/custom_engine.py
+
+Not a real backend -- it drives nothing. It exists to show the shape: running
+it registers the toy engine, drives it through `open_engine`, and prints what
+came back, including an action that honestly reports changed=False. It also
+shows that the conformance suite will refuse to be fooled by it:
 
     pytest --pyargs anybrowser_conformance --engine toy -p examples.custom_engine
 
@@ -11,6 +15,9 @@ cannot pass the honesty tests. That is the point.
 
 from __future__ import annotations
 
+import asyncio
+
+from anybrowser import open_engine
 from anybrowser.core import engines
 from anybrowser.core.engine import BrowserEngine, Capabilities, Capability, EngineInfo
 from anybrowser.core.types import (
@@ -81,3 +88,21 @@ class ToyEngine(BrowserEngine):
 # In your own package this is an entry point instead; registering in-process is
 # the shortcut for tests and examples.
 engines.register("toy", ToyEngine)
+
+
+async def main() -> None:
+    async with await open_engine("toy") as engine:
+        info = await engine.info()
+        print(f"driving {info.browser} via {info.name}")
+
+        nav = await engine.navigate("https://example.com")
+        print(f"navigated to {nav.url}; now at {await engine.url()}")
+
+        # The toy engine cannot click. The honest answer is a no-op, and
+        # `changed=False` is what stops an agent from counting it as progress.
+        outcome = await engine.scroll(0, 400)
+        print(f"scrolled: ok={outcome.ok} changed={outcome.changed} ({outcome.detail})")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
